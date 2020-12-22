@@ -42,12 +42,14 @@ data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
 -- Should work with no words as well
 solveWordSearch :: [ String ] -> WordSearchGrid -> [ (String,Maybe Placement) ]
 solveWordSearch ws css 
-    |(not.checkGridValidity) css  = error "Invalid Grid, it mustn't be empty or not square"
-    |(not.checkWordsValidity) ws  = error "Invalid list of words, a word cannot be an empty string"
-    | otherwise                   = map (placementSearch css) tuples  
+    |(not.checkGridValidity) grid  = error "Invalid Grid, it mustn't be empty or not square"
+    |(not.checkWordsValidity) words  = error "Invalid list of words, a word cannot be an empty string"
+    | otherwise                   = map (placementSearch grid) tuples  
   where
-    starts = map (startLetter css 0 0) ws
-    tuples = zip ws starts
+    words = upperCase ws
+    grid = upperCase css
+    starts = map (startLetter grid 0 0) words
+    tuples = zip words starts
 
 checkGridValidity :: WordSearchGrid -> Bool
 checkGridValidity [] = False
@@ -56,8 +58,12 @@ checkGridValidity g@(cs:_) = length g == length cs
 checkWordsValidity :: [ String ] -> Bool
 checkWordsValidity [] = False
 checkWordsValidity ([]:_) = False
-checkWordsValidity [w] = True
-checkWordsValidity (w:ws) = checkWordsValidity ws
+checkWordsValidity [_] = True
+checkWordsValidity (_:ws) = checkWordsValidity ws
+
+upperCase :: [String] -> [String]
+upperCase = map (map toUpper) 
+
 
 -- Function searches for all locations where the first letter of the word
 -- matches the letter in the cell or returns Nothing if none are found
