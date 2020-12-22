@@ -39,11 +39,25 @@ data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
 
 -- Challenge 1 --
 
+-- Should work with no words as well
 solveWordSearch :: [ String ] -> WordSearchGrid -> [ (String,Maybe Placement) ]
-solveWordSearch ws css = map (placementSearch css) tuples  
+solveWordSearch ws css 
+    |(not.checkGridValidity) css  = error "Invalid Grid, it mustn't be empty or not square"
+    |(not.checkWordsValidity) ws  = error "Invalid list of words, a word cannot be an empty string"
+    | otherwise                   = map (placementSearch css) tuples  
   where
     starts = map (startLetter css 0 0) ws
     tuples = zip ws starts
+
+checkGridValidity :: WordSearchGrid -> Bool
+checkGridValidity [] = False
+checkGridValidity g@(cs:_) = length g == length cs
+
+checkWordsValidity :: [ String ] -> Bool
+checkWordsValidity [] = False
+checkWordsValidity ([]:_) = False
+checkWordsValidity [w] = True
+checkWordsValidity (w:ws) = checkWordsValidity ws
 
 -- Function searches for all locations where the first letter of the word
 -- matches the letter in the cell or returns Nothing if none are found
