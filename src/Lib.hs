@@ -299,6 +299,30 @@ createWordSearch :: [ String ] -> Double -> IO WordSearchGrid
 createWordSearch _ _ = return []
 
 
+getDirections :: IO [Int] -> IO [Orientation]
+getDirections ns = do numbers <- ns 
+                      let orientation = map orientationAssociation numbers
+                      return orientation
+
+orientationAssociation :: Int -> Orientation
+orientationAssociation 1 = Forward
+orientationAssociation 2 = DownForward
+orientationAssociation 3 = Down
+orientationAssociation 4 = DownBack
+orientationAssociation 5 = Back
+orientationAssociation 6 = UpBack
+orientationAssociation 7 = Up
+orientationAssociation 8 = UpForward
+
+randList :: Int -> IO [Int]
+randList 0 = return []
+randList k = do n <- randomRIO (1,8)
+                ns <- randList (k-1)
+                return (n:ns)
+
+        
+
+
 --- Convenience functions supplied for testing purposes
 createAndSolve :: [ String ] -> Double -> IO [ (String, Maybe Placement) ]
 createAndSolve words maxDensity =   do g <- createWordSearch words maxDensity
