@@ -96,7 +96,7 @@ placementSearch css (w, Just (p:ps))
   | findWord css UpForward w p        = (w, Just(p, UpForward))
   | otherwise                         = placementSearch css (w, Just ps) 
 
--- Function attempt to compare all the word's letters with all the cells in a particular Orientation
+-- Function attempts to compare all the word's letters with all the cells in a particular Orientation
 -- returns True if in a particular Orientation we get a word and false
 -- if at any point the position leaves the valid range or the letter of the words isn't the same as in
 -- the cell
@@ -296,46 +296,251 @@ exWords1'4 = ["ADVANCED",
 -- Challenge 2 --
 
 createWordSearch :: [ String ] -> Double -> IO WordSearchGrid
-createWordSearch _ _ = return []
+createWordSearch ws density = gridFinal
+  where
+    gridN= gridlength ws density
+    gridEmpty = genEmptyGrid gridN
+    charSet = availableChar ws 
+    gridFinal = do gridWithWords <- insertWords ws gridEmpty
+                   fillGrid charSet gridWithWords
+
+debug :: [String] -> Double -> IO WordSearchGrid
+debug ws density = insertWords ws gridEmpty
+  where
+    gridN= gridlength ws density
+    gridEmpty = genEmptyGrid gridN
+    charSet = availableChar ws 
+-- createWordSearch ws den = 
+--   where
+--     wordsOrientation = genWordOrientation ws
+--     length = gridlength ws den
+--     emptyGrid = genEmptyGrid length
 
 
-getDirections :: IO [Int] -> IO [Orientation]
-getDirections ns = do numbers <- ns 
-                      let orientation = map orientationAssociation numbers
-                      return orientation
+-- Random Number generation 
+------------------------------------------------------------
+randVal :: Int -> Int -> IO Int
+randVal low up =  randomRIO (low, up)
 
-orientationAssociation :: Int -> Orientation
-orientationAssociation 1 = Forward
-orientationAssociation 2 = DownForward
-orientationAssociation 3 = Down
-orientationAssociation 4 = DownBack
-orientationAssociation 5 = Back
-orientationAssociation 6 = UpBack
-orientationAssociation 7 = Up
-orientationAssociation 8 = UpForward
+randList :: Int -> Int -> Int -> IO [Int]
+randList 0 _ _= return []
+randList size low up = do n <- randVal low up 
+                          ns <- randList (size-1) low up
+                          return (n:ns)
+------------------------------------------------------------
 
-randList :: Int -> IO [Int]
-randList 0 = return []
-randList k = do n <- randomRIO (1,8)
-                ns <- randList (k-1)
-                return (n:ns)
+-- Orientation generation
+------------------------------------------------------------
+numToOrient :: Int -> Orientation
+numToOrient index = [Forward, DownForward,
+                     Down,    DownBack,
+                     Back,    UpBack,
+                     Up,      UpForward]!!index
 
-        
+getDirections :: [Int] -> [Orientation]
+getDirections = map numToOrient
+
+-- genWordOrientation :: [String] -> IO [(String, Orientation)]
+-- genWordOrientation ws = do let size = length ws 
+--                            numList <- randList size 0 7
+--                            let directionList = getDirections numList 
+--                            let tuples = zip ws directionList
+--                            return tuples
+
+genWordOrientation :: String -> IO (String, Orientation)
+genWordOrientation w = do num <- randVal 0 7
+                          let orientation = numToOrient num
+                          return (w, orientation)
+
+------------------------------------------------------------
+
+-- Empty Grid Generation
+------------------------------------------------------------
+gridlength :: [String] -> Double -> Int
+gridlength ws density = ceiling((characterNo ws / density)/3) 
+  where
+    characterNo = fromIntegral.length.concat
+
+-- So far not needed
+genLine :: [String] -> Int -> IO String
+genLine ws ll = do let letters = (rmdups.concat) ws 
+                   let size = length letters
+                   values <- randList ll 0 (size - 1)
+                   let line = map (letters!!) values
+                   return line
+
+-- genEmptyGrid :: [String] -> Int -> IO [String]
+-- genEmptyGrid ws l = let line = genLine ws l
+--                      in sequenceIO $ replicate l line
+
+genEmptyGrid :: Int -> [String]
+genEmptyGrid l = replicate l (concat (replicate l "0"))
+------------------------------------------------------------
+
+-- Position Generation
+------------------------------------------------------------
+genPosn :: Orientation -> Int -> Int ->  IO Posn
+genPosn l wordl gridl = do let ((lowCol, upCol),(lowRow, upRow)) = posnRestrictions l wordl gridl
+                           col <- randVal lowCol upCol
+                           row <- randVal lowRow upRow
+                           return (col,row)
+
+posnRestrictions :: Orientation -> Int -> Int -> ((Int,Int), (Int, Int))
+posnRestrictions Forward wordl gridl        = ((0, gridl- wordl), (0, gridl-1))
+posnRestrictions Back wordl gridl           = ((wordl-1, gridl-1 ), (0, gridl-1))
+posnRestrictions Down wordl gridl           = ((0, gridl-1), (0, gridl- wordl))
+posnRestrictions Up wordl gridl             = ((0, gridl-1), (wordl - 1, gridl - 1))
+posnRestrictions DownForward wordl gridl    = ((0, gridl-wordl), (0, gridl-wordl))
+posnRestrictions UpForward wordl gridl      = ((0, gridl-wordl), (wordl - 1, gridl - 1))
+posnRestrictions DownBack wordl gridl       = ((wordl-1, gridl-1), (0, gridl-wordl))
+posnRestrictions UpBack wordl gridl         = ((wordl-1, gridl-1), (wordl - 1, gridl - 1))
+
+------------------------------------------------------------
+  
+--Word Insertion
+------------------------------------------------------------
+tryInsertWord :: Orientation -> Posn -> String -> [String]  -> Bool
+tryInsertWord _ _ [] _ = True 
+tryInsertWord Forward p@(col, row) (l:ls) css 
+  |findLetter css p == '0' = tryInsertWord Forward (col+1, row) ls css
+  |findLetter css p == l = tryInsertWord Forward (col+1, row) ls css
+  |otherwise = False
+tryInsertWord Back p@(col, row) (l:ls) css 
+  |findLetter css p == '0' = tryInsertWord Back (col-1, row) ls css
+  |findLetter css p == l = tryInsertWord Back (col-1, row) ls css
+  |otherwise = False
+tryInsertWord Up p@(col, row) (l:ls) css 
+  |findLetter css p == '0' = tryInsertWord Up (col, row - 1) ls css
+  |findLetter css p == l = tryInsertWord Up (col, row - 1) ls css
+  |otherwise = False
+tryInsertWord Down p@(col, row) (l:ls) css 
+  |findLetter css p == '0' = tryInsertWord Down (col, row + 1) ls css
+  |findLetter css p == l = tryInsertWord Down (col, row + 1) ls css
+  |otherwise = False
+tryInsertWord DownForward p@(col, row) (l:ls) css 
+  |findLetter css p == '0' = tryInsertWord DownForward (col+1, row + 1) ls css
+  |findLetter css p == l = tryInsertWord DownForward (col+1, row + 1) ls css
+  |otherwise = False
+tryInsertWord DownBack p@(col, row) (l:ls) css 
+  |findLetter css p == '0' = tryInsertWord DownBack (col-1, row + 1) ls css
+  |findLetter css p == l = tryInsertWord DownBack (col-1, row + 1) ls css
+  |otherwise = False
+tryInsertWord UpBack p@(col, row) (l:ls) css 
+  |findLetter css p == '0' = tryInsertWord UpBack (col-1, row - 1) ls css
+  |findLetter css p == l = tryInsertWord UpBack (col-1, row - 1) ls css
+  |otherwise = False
+tryInsertWord UpForward p@(col, row) (l:ls) css 
+  |findLetter css p == '0' = tryInsertWord UpForward (col+1, row - 1) ls css
+  |findLetter css p == l = tryInsertWord UpForward (col+1, row - 1) ls css
+  |otherwise = False
+
+replaceLetter :: Posn -> Char -> [String] -> [String]
+replaceLetter (0, 0) l ((c:cs):css) = (l:cs):css
+replaceLetter (col, 0) l ((c:cs):css)= (c: head (replaceLetter (col-1, 0) l (cs:css))) : css
+replaceLetter (col, row) l (cs:css) = cs : replaceLetter (col, row - 1) l css
+
+insertWord :: Orientation -> Posn -> String -> [String] -> [String]
+insertWord _ _ [] css = css
+insertWord Forward p@(col,row) (l:ls) css = insertWord Forward (col+1, row) ls (replaceLetter p l css)
+insertWord Back    p@(col,row) (l:ls) css = insertWord Back (col-1, row) ls (replaceLetter p l css)
+insertWord Up p@(col,row) (l:ls) css = insertWord Up (col, row-1) ls (replaceLetter p l css)
+insertWord Down p@(col,row) (l:ls) css = insertWord Down (col, row+1) ls (replaceLetter p l css)
+insertWord UpForward p@(col,row) (l:ls) css = insertWord UpForward (col+1, row-1) ls (replaceLetter p l css)
+insertWord DownForward p@(col,row) (l:ls) css = insertWord DownForward (col+1, row+1) ls (replaceLetter p l css)
+insertWord UpBack p@(col,row) (l:ls) css = insertWord UpBack (col-1, row-1) ls (replaceLetter p l css)
+insertWord DownBack p@(col,row) (l:ls) css = insertWord DownBack (col-1, row+1) ls (replaceLetter p l css)
+
+-- successfullInsertWord :: Posn -> [String] -> [String] -> IO [String]
+-- successfullInsertWord p (w:ws) css = do (_,orientation) <- genWordOrientation w
+--                                         if tryInsertWord w orientation then
+--                                                                        grid <- insertWord orientation p 
+
+-- Change to foldM
+insertWords :: [String] -> [String] -> IO [String]
+insertWords [] css = return css
+insertWords (w:ws) css = do first <- generateInsertWord w css
+                            insertWords ws first
+
+generateInsertWord :: String -> [String] -> IO [String]
+generateInsertWord w css = do (_, orientation) <- genWordOrientation w
+                              position <- genPosn orientation (length w) (length css)
+                              if tryInsertWord orientation position w css 
+                                 then 
+                                   return (insertWord orientation position w css)
+                                 else 
+                                   generateInsertWord w css
+
+-- canReplaceLetter :: [String] -> Char -> Posn -> Bool canReplaceLetter css l p = findLetter css p == '0' || findLetter css p == l
+
+------------------------------------------------------------
+  
+--Finish Off the Grid
+------------------------------------------------------------
+fillGrid ::String -> [String] -> IO[String]
+fillGrid _ [] = return []
+fillGrid ls (cs:css) = do line <- fillLine ls cs
+                          rest <- fillGrid ls css
+                          return (line:rest)
+
+fillLine :: String -> String -> IO String
+fillLine _ [] = return []
+fillLine ls (c:cs) = do character <- randomChar ls
+                        let r = tryReplace character c
+                        rest <- fillLine ls cs
+                        return (r:rest)
+
+availableChar :: [String] -> String
+availableChar = rmdups.concat
+            
+tryReplace :: Char -> Char -> Char
+tryReplace l c  | c == '0' = l
+  | otherwise = c
+
+randomChar :: String -> IO Char
+randomChar ls = do index <- randVal 0 (length ls - 1)
+                   return (ls!!index)
+                        
+------------------------------------------------------------
+-- Additional Functions
+------------------------------------------------------------
+-- TODO: Possibly add it back to empty grid
+sequenceIO :: [IO a] -> IO[a]
+sequenceIO [] = return []
+sequenceIO (x:xs) = do el <- x
+                       els <- sequenceIO xs
+                       return (el:els)
+
+-- https://stackoverflow.com/questions/16108714/removing-duplicates-from-a-list-in-haskell-without-elem
+-- Removes duplicates with O(nlogn) time
+-- TODO:: Maybe change it to the other stable solution (check link, comments under the solution i used)
+rmdups :: (Ord a) => [a] -> [a]
+rmdups = map head . group . sort
+------------------------------------------------------------
 
 
+ 
 --- Convenience functions supplied for testing purposes
 createAndSolve :: [ String ] -> Double -> IO [ (String, Maybe Placement) ]
-createAndSolve words maxDensity =   do g <- createWordSearch words maxDensity
+createAndSolve words maxDensity =   do g <- debug words maxDensity
                                        let soln = solveWordSearch words g
                                        printGrid g
                                        return soln
 
 printGrid :: WordSearchGrid -> IO ()
 printGrid [] = return ()
-printGrid (w:ws) = do putStrLn w
+printGrid (w:ws) = do printLine w
                       printGrid ws
 
+printLine :: String -> IO ()
+printLine [] = putChar '\n' 
+printLine (l:ls) = do putChar l
+                      putChar ' '
+                      printLine ls
 
+
+cheekyHelp:: IO ()
+cheekyHelp = do puzzle <- createWordSearch ["МАМА", "ПАПА", "ЮЛА", "БАБУШКА", "КАРТОШКА"] 0.9
+                printGrid puzzle
 
 -- Challenge 3 --
 
