@@ -20,6 +20,7 @@ import GHC.Generics (Generic,Generic1)
 import Control.DeepSeq
 import System.IO
 import System.Random
+import Data.Maybe 
 
 
 -- types for Part I
@@ -142,346 +143,176 @@ findWord css UpForward (l:ls) p@(col, row)
 findLetter :: WordSearchGrid -> Posn -> Char 
 findLetter css (col, row) = (css!!row)!!col
 
--- Two examples for you to try out, the first of which is in the instructions
-
-exGrid1'1 = [ "HAGNIRTSH" , "SACAGETAK", "GCSTACKEL","MGHKMILKI","EKNLETGCN","TNIRTLETE","IRAAHCLSR","MAMROSAGD","GIZKDDNRG" ] 
-exWords1'1 = [ "HASKELL","STRING","STACK","MAIN","METHOD"]
-
-exGrid1'2 = ["ROBREUMBR","AURPEPSAN","UNLALMSEE","YGAUNPYYP","NLMNBGENA","NBLEALEOR","ALRYPBBLG","NREPBEBEP","YGAYAROMR"]
-exWords1'2 = [ "BANANA", "ORANGE", "MELON", "RASPBERRY","APPLE","PLUM","GRAPE" ]
-
-
-exGrid1'3 = ["ZEZDWEHIZYXDEAWTYBGRHXBJALNSWIRHLYZDXXLTCOZEETROWB",
-    "SXUYKUFMLWSDJBSSHLHYBDLUKMONMMSPTQZCSRGGMZWHCWZPLM",
-    "TWBMHVQMCAKLTWXHRAZYLWCMBOYROUYQCKOQWWHPQXLIFARGQI",
-    "FMANXUCMXJTLKHDFONNYWFWVPBLERZRTMFHKJITUAWVRHXQXCB",
-    "MIWTQLYNSNIVOXUANPBLVDIACRDVIEFDBDWPSLMQGFGFAKEVAH",
-    "MPCDWUTOMNBQXRNNIEWKFHKKXOYZSOAQEEIMPCEOWJOZFPEQWW",
-    "XAGKKFWGAHJCWVRPIVRUPUUUQWFTGRZCOZOXOWRSBXFJUZNGWV",
-    "AUHJVDBXXBCTFGQXFRDLVIVOGGBGFORCSBPNNWQVIMXAAUYMFQ",
-    "LEXODWNRAUIXQJUKSJIKDFMWBQBBFIPRSEJHSTNCNXUJSLFGVZ",
-    "BVCIULETUMHCLRGPUHMEYSAJWJYJDFQTOLKAADFGIPRMWNRPJQ",
-    "SRBLDEQSJHVKNKAPBRYZVBBJMUDLIIJQFHATZRTAZKXZBKJJUV",
-    "JXYILEXJVWSRUKADKYNQLLHMPDYUAYMKWMSERTJAREYUVMVVTR",
-    "OVQABGVDUBSTFCUIOCVCRVTIHKDEWKZRAWERRALVORTXWOBHXB",
-    "WDXXCKJXHJFMLVLCZEPIIEWZEIGEJPMZZCXIHNWLDGNLVDUFLU",
-    "KVEGNFAWMIYIJAHIOBMBTNCHZJFMCCIETJHIJNUCEIKKMIHNFY",
-    "UXRMCSJAOJOFCQFZSCYRHWTIKMEHWNGUBAOSHFSPNKFCKNDZAY",
-    "HLXSAMQIWZZYLEXVAAFZRWDZUTIDGHAKBZUYIRVMLHSOQFUAXV",
-    "WDLTUTVBSMJOZSVXCFCFHPHUEHGDURVVISPTLAIEIVXAUVRPIN",
-    "YAOJWIRHOYTGJUXFKELPKSHZWVSVHVFWDTUUPGXETHTEHLNKFQ",
-    "DCXSYWIGZBZDKXGXIQZKENNLDKPCANARTAHOFAADGLFEJPSFUW",
-    "ECKECGTDPXOTRZNKJFDWJGZTYHCDVLOVEUSMLUFNTYCBUVPDZJ",
-    "XVECZWSAXMYCJEWQLGVIRUYDEWGVHWZBNSHJVUBQQFVBOEXILN",
-    "BFZQSNMFBUBNJGABSPWYXQEDNQUKIIOBIAUVIYCZTPJDGMVSUG",
-    "UMYOLSQNBZCRBSSQANNTHJKYEGHDNXPBLABDCNPIAHSEAIWDZF",
-    "JNPGMJPDTHSWDMOPTNZZVWLITKCTNHLIQGZOIJPGDAJMCDMCQO",
-    "FAZOFFWOMVWKUUWWBAZHSSLOIYWHJEKWHRRRHLIJXIFPVRLIPV",
-    "BVJQGLFRWVQTNCHRLRQPHUXFEWNZINNILPGSVIPFHTRHYZUTZP",
-    "VEIUNHPLRUNREBSJPJEYEDOCXMGHXCYZBIJJYNKNZEOIFTPEVT",
-    "KRSDLGGZODDRTESLHFSICKGJGLAWUYPEVGMKYPPTTRURDYWJST",
-    "GFKGMSQRDCLLIGPEULPVIRAPAUCGPQYTGMIDZBPUNMOFVXWSNT",
-    "ALVMEEMLSSPAQDYGGOAKCOUYYUEWHTKYAZWOFEPCIISKYBCUQR",
-    "NBIMVEDVQNYZQJCSBKMDGTZNVYVUSMSVSKQLCMCJOTOEPPWTSW",
-    "JNANEEXNGVPQOHINBMSOSKNRWWSLRBMQFUTPOFMZJTJPQZATHB",
-    "IRIRKWSXPRIZXJOLHJHPDXRPWAVBYODQCSDCJSNTNEQXKNAQRJ",
-    "PXGZCUUBYGLBHIHPBKEROXASDDSNBOELVZUYOLSKRNXEBYKWKP",
-    "PDOVFQCLDZAWIEEILNNJGPDKSQBWACREZPCLUTCZSTUAIIXBOA",
-    "DTMKOVPLMCXLCWDKGHHWPIDPWPKULRXMGRUGUZQYKEAZZNYQTF",
-    "HUGHJPVTAZAOTQOIFALDXYBKBXZFYLUVITXNANHNZFSENHSSQA",
-    "QVUFBSYNFKPQYFICTOODAXHTTCQEIWYNPOUPCQBVSHYYKFCWYI",
-    "FOZVWGWMCCWCVKYFUVXZWAPKEKLWALDUNQULXJAMWSRZEHKNQX",
-    "UXEWQJDAIFDQTHVWIDBHBAFTJNXJNDXZYHGPIPOKBDTPHHZYPT",
-    "RDONXXYOGUWKKRKCLJFMGGTOENHFSMSFZCZKUVMBNSXTVSEFZH",
-    "VLAEJJPNGKVEQKHHXAQEZXZIEQBSHMDORWPWZMKTTHCQLHXXWV",
-    "EPLAXSGKUJUXGHJEUZQUUKHGHODSBBJGFUZHPDQLWGRINRITJD",
-    "HGCPKUEPUPBYZQNJOQIRWGBCARIWEADAASONQFPKJWFSEKYZFY",
-    "JMMECNWWWAKKWIXCNHNYGQYLTNOZEIAEATAPWFETLHOHIQWJFC",
-    "OKZYNEYNPTBAZEOQYZAUBIJUDBHQAIXBHAOZEADWWEITCVGHXR",
-    "LYMKXTSEPZKYXKHETKXWPSWPUELDKVIDWHNYITAYJZDMFAHJWS",
-    "POFDLGXAYGLUTBOEWXNWZEJVUYSCTDASDINFCLQXDDIUXWHMBZ",
-    "ROMASZUOZZZWOWLFUQAEACRHOXBAGNKTXJXIBMBPFFJJCGILFX"]
-exWords1'3 =  ["ADVANCED",
-    "AMAZING",
-    "BEAUTIFUL",
-    "COMPUTER",
-    "HASKELL",
-    "HATE",
-    "ITERMITTENT",
-    "JOINT",
-    "LOVE",
-    "OUT",
-    "POINT",
-    "POSSIBLE",
-    "RIDICULOUS",
-    "UNREAL",
-    "WORDS"]
-
-exGrid1'4 = ["BVMGKKLPUDNSAELXQEJTKZRWEQLXOJXTJBMDAYRJDILJPYVVSE",
-  "RYRTWXGQNFUERPIOZXDGWPICWVZLGTDJSBJLORLQYVIKPFICNQ",
-  "QPCUWGLCDYZDJLFEKHXSDLJIUBFWBVLWJLHPNBOVGYRCPTHUGS",
-  "QCNSRIDYZQSFLPCMQNHJUQOHSIATOSQCJETGQPGQXUYARWVKWP",
-  "VYQFSOHEEEQQGUOSXNPFZWCVSPKFMFJXSUFDBYEGFKMLIZYOVG",
-  "JDXYPRTFPJRRWVRWBEEAWIDXEETEUDLAFQKDEFWSYOWQUQDUTU",
-  "RFLUQNBPOGSNQWTVJUVJPSQOHLLNEJMXKAMHMKTGLBJXCLMESM",
-  "SMEMXNFYCQCXRZKMUFBQFMTDCABDNLXMYGLFAMQEMZVCSQYOCK",
-  "ERSDPQDCIVRLRWRDQEHRWVQGPESAILZXAPDBDACWWLYDRIPHFD",
-  "EZCPPMPPOTNCRCREUAJESPKLLRZKPZSONFOQBDPENXIEMLOGBJ",
-  "WDHLRWZYROXLRGZXKBZHWTNIINAHEPARROTHAXXBGYTPSWNDOW",
-  "VFNVZHCWUDFBYYCNJHGTNZEOTUSUTLOEYHSPIMKDKLFCWKPGRM",
-  "DPDVDOGMKMLJVHGTLJRADVANCEDUARLTXLUGYIUTIXCXQTJCSB",
-  "FDTOZLJDDKKXWTEGBRDFAMIGQORIHBLUSGOYNEBBGVQSOMFSRA",
-  "INEDEOKOZIUKOIUZKHTBSOOZIHOMIGWPDNLWEKIGHNSWZXIYGA",
-  "XZBAWOGVOKJDYLVXHRLNPWJQJOWSITLMJIUJHHSYBSIVMLNLLL",
-  "YBDEVIPBLXCJRFEZEEVNAJOLADSIITXOFUCBTLQYKORATILBVS",
-  "OYPGSMHNEPQPSYIUNNSLSZRAUOMZQNTCQGIRUPQAZOLAAQTMQX",
-  "XMMXNGVLJJMPQOEXCLXRYOXYPPSODVOEOIDFOPFMSSTQIVRGOD",
-  "SFOYMXVYXJIDMLESAOACIIPQUXOGCAFRNRIEOUVEMNONIVPTQW",
-  "XWFPPLUARGRXDBCKJNQLQOZBAXRZJSTNETRTSOSVXLECERQJNI",
-  "VJWKJQTGUWZCZQXTXHQSRAPMNHNWLNFZUNVVGAJKIUIRCBBBIJ",
-  "OXEYMLWDJLHXBOJLMNDILBNSAHZXXAMAZINGOTCCDCJWKVYAGG",
-  "UJVDIFGFJPWNNHNJPJLKMWUZASDQKYEPYOPIFPSDKUCEQCLTMD",
-  "VFJXKBJQNZZYLBOECHPDEKNYMVOBMBZBXJCTWVIXJXMKHNDMLF",
-  "VJYJTTQXLZGFATRKQUHQXCYZCFXHYUBIHKOLRPJZBHOOGLJXBO",
-  "USZCHYFRXDRQNIJVFSFUEEQBUKBRQAZBIYVBYFSKIAPCGQWIWC",
-  "QOOXYYYUSQACFYXFSELFGCFVAJWPNOQNGBBNTOAMMMZPNXPMWP",
-  "HISINLFPWRDDNWILFMUQCNRJDWQPKRRLCZVWJULXTHMUNBEUND",
-  "YTFSNLYJKPJPIXIOKGTUANCTJDRZAJNZXPJZJWZLORNGEDMLFG",
-  "SJENLPNVBODHUIMWQHLUSOYKWMLGEDALGJGDHCTNRSXRUQLEZM",
-  "BJUDGLMGMLXYQMLSMMEUWWOHMSCHQDMMMTQNINJKMXFHUCGJES",
-  "PZQNSGFPGSTNEFZDUDZFOXUSPQIWUEPZEDVEFNKKTIQWBOWPWK",
-  "XFCPQBPIAMBAAMIPFLBXHIEMBXELKJISYEALJDTVPPBXTISWOA",
-  "HLEOZQTHOTXPSMVUIIFAQMWXWRBSTGSNYXIFTEOQHLPKOCKQCE",
-  "MYSTQZMFFTAFKQAIALANFQIJUZJALKHWLBNARNYMNPBELAQNOK",
-  "HBOXSLULTPRTAHKLQRTFHIGMJMOHSKFHCEIDNOVZEGXJGKPIOD",
-  "QQNSRMNPPDJYHFAIHZSRFSEKXWBBIWVVDOSNBUAXIFPZAJNXGC",
-  "KQFWHMNYLFWEZDANXQTNKUMDKMSXEHZCOKDNBVLFLTNLNLBGBA",
-  "ZXFSWQWHQYNXHSGWFXAWMIDPOUAFBKHNAAYAHIZJCRBEYNNXUC",
-  "SAMZMPGLZVUPOCECEDNWVOIGIMRGILCHPSDUOSXMYRANYPSFKM",
-  "IXKVRUWFJNTKLRHIGMJWTCLEOULYYPEMMCBKMFVRZWQCIHHQQY",
-  "XDLZTDCDCDJAMUDVDTNWSMIPDJMCZBXJTHRDTPCZXNRMYAPUAB",
-  "ZJGOECTMGIUIAPJNYKRSLBHLSBGYGPOOCHWQEHJUVKEDPSPDKJ",
-  "VFUKDEPHUJQHROZDYNHYMIYNJGTJIFMSXUAKYMTABNXIHULXZI",
-  "BJYXLFSSSOMOIQPCZZCOXIVMLIDRSFVUROJTKSBPQDUOKCBJHS",
-  "XZJBKEZRHVNEVBEJCAKJBOOYPJHLBHYPPWOSOHOFBJJGUTNTJV",
-  "ZPPGNYDEMCJLAMNKCQEMDWSLUVLOVQMJQULJNZTCNMUOOHYTNG",
-  "XKVNOGIIODCWTUXKINPARIYZCHOXCAHYQSPDWYMEZDIJKGIVBJ",
-  "VYEZGZBFBHHLZECBNPXQVTLFQSXLLKPFQOGAYMCCHVCDHBCQUZ"]
-
-exWords1'4 = ["ADVANCED",
-  "AMAZING",
-  "BEAUTIFUL",
-  "CHESS",
-  "COMPUTER",
-  "FATHER",
-  "HASKELL",
-  "HATE",
-  "INTRIGUING",
-  "ITERMITTENT",
-  "JOINT",
-  "LION",
-  "LOVE",
-  "LUDICROUS",
-  "OUT",
-  "PARROT",
-  "POINT",
-  "POSSIBLE",
-  "RIDICULOUS",
-  "SON",
-  "UNBELIEVABLE",
-  "UNREAL",
-  "UNSTOPPABLE",
-  "WINNER",
-  "WORDS"]
 -- Challenge 2 --
-
 createWordSearch :: [ String ] -> Double -> IO WordSearchGrid
-createWordSearch ws density = gridFinal
-  where
-    gridN= gridlength ws density
-    gridEmpty = genEmptyGrid gridN
-    charSet = availableChar ws 
-    gridFinal = do gridWithWords <- insertWords ws gridEmpty
-                   fillGrid charSet gridWithWords
+createWordSearch ws density
+  | (not.isValidDensity) density = error "Invalid density, it must be between 0 and 1 (excluding them)"
+  | (not.checkWordsValidity) ws = error "Invalid list of words, a word cannot be empty"
+  | otherwise = do let words = upperCase ws
+                   let gridN= gridlength words density
+                   let gridEmpty = genEmptyGrid gridN
+                   let charSet = availableChar words 
+                   gridWithWords <- insertWords words gridEmpty
+                   finalGrid <- fillGrid charSet gridWithWords
+                   if findUniqueWords finalGrid words
+                      then
+                      return finalGrid
+                      else
+                      createWordSearch words density
 
-debug :: [String] -> Double -> IO WordSearchGrid
-debug ws density = insertWords ws gridEmpty
-  where
-    gridN= gridlength ws density
-    gridEmpty = genEmptyGrid gridN
-    charSet = availableChar ws 
--- createWordSearch ws den = 
---   where
---     wordsOrientation = genWordOrientation ws
---     length = gridlength ws den
---     emptyGrid = genEmptyGrid length
-
-
+-- Validity Checks
+------------------------------------------------------------
+isValidDensity :: Double -> Bool
+isValidDensity density = density < 1 && density > 0
+------------------------------------------------------------
+  
 -- Random Number generation 
 ------------------------------------------------------------
+-- Function that generates 
+-- Random value based on lower and upper bounds
 randVal :: Int -> Int -> IO Int
 randVal low up =  randomRIO (low, up)
-
-randList :: Int -> Int -> Int -> IO [Int]
-randList 0 _ _= return []
-randList size low up = do n <- randVal low up 
-                          ns <- randList (size-1) low up
-                          return (n:ns)
 ------------------------------------------------------------
 
 -- Orientation generation
 ------------------------------------------------------------
+-- Function uses to map a randomly generated integer to 
+-- An Orientation for word orientation's randomness
 numToOrient :: Int -> Orientation
 numToOrient index = [Forward, DownForward,
                      Down,    DownBack,
                      Back,    UpBack,
                      Up,      UpForward]!!index
 
-getDirections :: [Int] -> [Orientation]
-getDirections = map numToOrient
-
--- genWordOrientation :: [String] -> IO [(String, Orientation)]
--- genWordOrientation ws = do let size = length ws 
---                            numList <- randList size 0 7
---                            let directionList = getDirections numList 
---                            let tuples = zip ws directionList
---                            return tuples
-
+-- Function takes a word and generates a random direction
+-- For it using the helper function above
 genWordOrientation :: String -> IO (String, Orientation)
-genWordOrientation w = do num <- randVal 0 7
-                          let orientation = numToOrient num
-                          return (w, orientation)
-
+genWordOrientation word = do num <- randVal 0 7
+                             let orientation = numToOrient num
+                             return (word, orientation)
 ------------------------------------------------------------
 
 -- Empty Grid Generation
 ------------------------------------------------------------
+-- Function that generates the length for a square grid
+-- Based on the density value
+-- TODO: Make it better
 gridlength :: [String] -> Double -> Int
-gridlength ws density = ceiling((characterNo ws / density)/3) 
+gridlength words density = ceiling((characterNo words / density)/3) 
   where
     characterNo = fromIntegral.length.concat
 
--- So far not needed
-genLine :: [String] -> Int -> IO String
-genLine ws ll = do let letters = (rmdups.concat) ws 
-                   let size = length letters
-                   values <- randList ll 0 (size - 1)
-                   let line = map (letters!!) values
-                   return line
-
--- genEmptyGrid :: [String] -> Int -> IO [String]
--- genEmptyGrid ws l = let line = genLine ws l
---                      in sequenceIO $ replicate l line
-
-genEmptyGrid :: Int -> [String]
+-- Create a grid filled with 0's
+-- Used later on to first fill it up with hidden words
+genEmptyGrid :: Int -> WordSearchGrid
 genEmptyGrid l = replicate l (concat (replicate l "0"))
 ------------------------------------------------------------
 
 -- Position Generation
 ------------------------------------------------------------
+-- Function that generates the range for the column and row
+-- Based on the orientation given and word & grid length
+-- Used to improve efficiency and to make the first letter 
+-- Position generation less likely to fail
+posnRestrictions :: Orientation -> Int -> Int -> ((Int,Int), (Int, Int))
+posnRestrictions Forward wordl gridl        = ( (0,        gridl- wordl), (0,         gridl-1)      )
+posnRestrictions Back wordl gridl           = ( (wordl-1,  gridl-1 ),     (0,         gridl-1)      )
+posnRestrictions Down wordl gridl           = ( (0,        gridl-1),      (0,         gridl- wordl) )
+posnRestrictions Up wordl gridl             = ( (0,        gridl-1),      (wordl - 1, gridl - 1)    )
+posnRestrictions DownForward wordl gridl    = ( (0,        gridl-wordl),  (0,         gridl-wordl)  )
+posnRestrictions UpForward wordl gridl      = ( (0,        gridl-wordl),  (wordl - 1, gridl - 1)    )
+posnRestrictions DownBack wordl gridl       = ( (wordl-1,  gridl-1),      (0,         gridl-wordl)  )
+posnRestrictions UpBack wordl gridl         = ( (wordl-1,  gridl-1),      (wordl - 1, gridl - 1)    )
+
+-- Function that uses the ranges generated by helper function
+-- posnRestrictions and generates appropriate random row and column
 genPosn :: Orientation -> Int -> Int ->  IO Posn
 genPosn l wordl gridl = do let ((lowCol, upCol),(lowRow, upRow)) = posnRestrictions l wordl gridl
                            col <- randVal lowCol upCol
                            row <- randVal lowRow upRow
                            return (col,row)
-
-posnRestrictions :: Orientation -> Int -> Int -> ((Int,Int), (Int, Int))
-posnRestrictions Forward wordl gridl        = ((0, gridl- wordl), (0, gridl-1))
-posnRestrictions Back wordl gridl           = ((wordl-1, gridl-1 ), (0, gridl-1))
-posnRestrictions Down wordl gridl           = ((0, gridl-1), (0, gridl- wordl))
-posnRestrictions Up wordl gridl             = ((0, gridl-1), (wordl - 1, gridl - 1))
-posnRestrictions DownForward wordl gridl    = ((0, gridl-wordl), (0, gridl-wordl))
-posnRestrictions UpForward wordl gridl      = ((0, gridl-wordl), (wordl - 1, gridl - 1))
-posnRestrictions DownBack wordl gridl       = ((wordl-1, gridl-1), (0, gridl-wordl))
-posnRestrictions UpBack wordl gridl         = ((wordl-1, gridl-1), (wordl - 1, gridl - 1))
-
 ------------------------------------------------------------
   
 --Word Insertion
 ------------------------------------------------------------
-tryInsertWord :: Orientation -> Posn -> String -> [String]  -> Bool
-tryInsertWord _ _ [] _ = True 
-tryInsertWord Forward p@(col, row) (l:ls) css 
-  |findLetter css p == '0' = tryInsertWord Forward (col+1, row) ls css
-  |findLetter css p == l = tryInsertWord Forward (col+1, row) ls css
-  |otherwise = False
-tryInsertWord Back p@(col, row) (l:ls) css 
-  |findLetter css p == '0' = tryInsertWord Back (col-1, row) ls css
-  |findLetter css p == l = tryInsertWord Back (col-1, row) ls css
-  |otherwise = False
-tryInsertWord Up p@(col, row) (l:ls) css 
-  |findLetter css p == '0' = tryInsertWord Up (col, row - 1) ls css
-  |findLetter css p == l = tryInsertWord Up (col, row - 1) ls css
-  |otherwise = False
-tryInsertWord Down p@(col, row) (l:ls) css 
-  |findLetter css p == '0' = tryInsertWord Down (col, row + 1) ls css
-  |findLetter css p == l = tryInsertWord Down (col, row + 1) ls css
-  |otherwise = False
-tryInsertWord DownForward p@(col, row) (l:ls) css 
-  |findLetter css p == '0' = tryInsertWord DownForward (col+1, row + 1) ls css
-  |findLetter css p == l = tryInsertWord DownForward (col+1, row + 1) ls css
-  |otherwise = False
-tryInsertWord DownBack p@(col, row) (l:ls) css 
-  |findLetter css p == '0' = tryInsertWord DownBack (col-1, row + 1) ls css
-  |findLetter css p == l = tryInsertWord DownBack (col-1, row + 1) ls css
-  |otherwise = False
-tryInsertWord UpBack p@(col, row) (l:ls) css 
-  |findLetter css p == '0' = tryInsertWord UpBack (col-1, row - 1) ls css
-  |findLetter css p == l = tryInsertWord UpBack (col-1, row - 1) ls css
-  |otherwise = False
-tryInsertWord UpForward p@(col, row) (l:ls) css 
-  |findLetter css p == '0' = tryInsertWord UpForward (col+1, row - 1) ls css
-  |findLetter css p == l = tryInsertWord UpForward (col+1, row - 1) ls css
-  |otherwise = False
-
+-- Function replaces a letter in a given position in a grid
+-- While keeping the rest the same
 replaceLetter :: Posn -> Char -> [String] -> [String]
-replaceLetter (0, 0) l ((c:cs):css) = (l:cs):css
+replaceLetter (0, 0) l ((_:cs):css) = (l:cs):css
 replaceLetter (col, 0) l ((c:cs):css)= (c: head (replaceLetter (col-1, 0) l (cs:css))) : css
 replaceLetter (col, row) l (cs:css) = cs : replaceLetter (col, row - 1) l css
 
-insertWord :: Orientation -> Posn -> String -> [String] -> [String]
-insertWord _ _ [] css = css
-insertWord Forward p@(col,row) (l:ls) css = insertWord Forward (col+1, row) ls (replaceLetter p l css)
-insertWord Back    p@(col,row) (l:ls) css = insertWord Back (col-1, row) ls (replaceLetter p l css)
-insertWord Up p@(col,row) (l:ls) css = insertWord Up (col, row-1) ls (replaceLetter p l css)
-insertWord Down p@(col,row) (l:ls) css = insertWord Down (col, row+1) ls (replaceLetter p l css)
-insertWord UpForward p@(col,row) (l:ls) css = insertWord UpForward (col+1, row-1) ls (replaceLetter p l css)
-insertWord DownForward p@(col,row) (l:ls) css = insertWord DownForward (col+1, row+1) ls (replaceLetter p l css)
-insertWord UpBack p@(col,row) (l:ls) css = insertWord UpBack (col-1, row-1) ls (replaceLetter p l css)
-insertWord DownBack p@(col,row) (l:ls) css = insertWord DownBack (col-1, row+1) ls (replaceLetter p l css)
+-- Function attempts to insert a word into a particular area
+-- Bases the insertion on orientation and position
+-- TODO: Add a goforward go backward function that takes a position and changes it
+updateInsert :: Orientation -> Posn -> String -> [String] -> Maybe [String]
+updateInsert _ _ [] css = Just css
+updateInsert Forward p@(col, row) (l:ls) css 
+  |canReplaceLetter css l p = updateInsert Forward (col+1, row) ls (replaceLetter p l css)
+  |otherwise = Nothing
+updateInsert Back p@(col, row) (l:ls) css 
+  |canReplaceLetter css l p = updateInsert Back (col-1, row) ls (replaceLetter p l css)  
+  |otherwise = Nothing
+updateInsert Up p@(col, row) (l:ls) css 
+  |canReplaceLetter css l p = updateInsert Up (col, row - 1) ls (replaceLetter p l css)  
+  |otherwise = Nothing
+updateInsert Down p@(col, row) (l:ls) css 
+  |canReplaceLetter css l p = updateInsert Down (col, row + 1) ls (replaceLetter p l css)
+  |otherwise = Nothing
+updateInsert DownForward p@(col, row) (l:ls) css 
+  |canReplaceLetter css l p = updateInsert DownForward (col+1, row + 1) ls (replaceLetter p l css)  
+  |otherwise = Nothing
+updateInsert DownBack p@(col, row) (l:ls) css 
+  |canReplaceLetter css l p = updateInsert DownBack (col-1, row + 1) ls (replaceLetter p l css)   
+  |otherwise = Nothing
+updateInsert UpBack p@(col, row) (l:ls) css 
+  |canReplaceLetter css l p = updateInsert UpBack (col-1, row - 1) ls (replaceLetter p l css)   
+  |otherwise = Nothing
+updateInsert UpForward p@(col, row) (l:ls) css 
+  |canReplaceLetter css l p = updateInsert UpForward (col+1, row - 1) ls (replaceLetter p l css)  
+  |otherwise = Nothing
 
--- successfullInsertWord :: Posn -> [String] -> [String] -> IO [String]
--- successfullInsertWord p (w:ws) css = do (_,orientation) <- genWordOrientation w
---                                         if tryInsertWord w orientation then
---                                                                        grid <- insertWord orientation p 
+-- Function that acts as a guard for the updateInsert
+-- Checks if the cell is free or has the same letter as the word
+canReplaceLetter :: [String] -> Char -> Posn -> Bool 
+canReplaceLetter css l p = findLetter css p == '0' || findLetter css p == l
 
 -- Change to foldM
+-- Function that takes an array of words and inserts them
+-- In a given grid
 insertWords :: [String] -> [String] -> IO [String]
 insertWords [] css = return css
 insertWords (w:ws) css = do first <- generateInsertWord w css
                             insertWords ws first
 
+-- Function that takes a string and generates a successfull position
+-- And orientation for it that results in it being inserted in a given grid
 generateInsertWord :: String -> [String] -> IO [String]
 generateInsertWord w css = do (_, orientation) <- genWordOrientation w
                               position <- genPosn orientation (length w) (length css)
-                              if tryInsertWord orientation position w css 
+                              let insertInGrid = updateInsert orientation position w css
+                              if isJust insertInGrid
                                  then 
-                                   return (insertWord orientation position w css)
+                                   do let Just grid = insertInGrid
+                                      return grid 
                                  else 
                                    generateInsertWord w css
-
--- canReplaceLetter :: [String] -> Char -> Posn -> Bool canReplaceLetter css l p = findLetter css p == '0' || findLetter css p == l
-
 ------------------------------------------------------------
   
---Finish Off the Grid
+-- Finish Off the Grid
 ------------------------------------------------------------
-fillGrid ::String -> [String] -> IO[String]
+-- Function that fills up the grid
+-- With already hidden words with other random characters
+-- Based on the words given
+fillGrid :: String -> [String] -> IO[String]
 fillGrid _ [] = return []
 fillGrid ls (cs:css) = do line <- fillLine ls cs
                           rest <- fillGrid ls css
                           return (line:rest)
 
+-- Function that fills up one specific
+-- Line with random characters, except for cells taken
+-- By hidden walls
 fillLine :: String -> String -> IO String
 fillLine _ [] = return []
 fillLine ls (c:cs) = do character <- randomChar ls
@@ -489,34 +320,75 @@ fillLine ls (c:cs) = do character <- randomChar ls
                         rest <- fillLine ls cs
                         return (r:rest)
 
+-- Function that generates a set of 
+-- Available characters from given words
+-- https://stackoverflow.com/questions/16108714/removing-duplicates-from-a-list-in-haskell-without-elem
+-- Removes duplicates from a given array with O(nlogn) time
+-- TODO:: Maybe change it to the other stable solution (check link, comments under the solution i used)
 availableChar :: [String] -> String
-availableChar = rmdups.concat
+availableChar = (head.group.sort).concat
             
+-- Function that returns either the original character
+-- Or the new one, depending on whether the cell is free or not
 tryReplace :: Char -> Char -> Char
 tryReplace l c  | c == '0' = l
   | otherwise = c
 
+-- Function that generates a random character
+-- Based on the random number given
 randomChar :: String -> IO Char
 randomChar ls = do index <- randVal 0 (length ls - 1)
                    return (ls!!index)
-                        
-------------------------------------------------------------
--- Additional Functions
-------------------------------------------------------------
--- TODO: Possibly add it back to empty grid
-sequenceIO :: [IO a] -> IO[a]
-sequenceIO [] = return []
-sequenceIO (x:xs) = do el <- x
-                       els <- sequenceIO xs
-                       return (el:els)
-
--- https://stackoverflow.com/questions/16108714/removing-duplicates-from-a-list-in-haskell-without-elem
--- Removes duplicates with O(nlogn) time
--- TODO:: Maybe change it to the other stable solution (check link, comments under the solution i used)
-rmdups :: (Ord a) => [a] -> [a]
-rmdups = map head . group . sort
 ------------------------------------------------------------
 
+-- Verify Uniqueness of the Grid
+------------------------------------------------------------
+startLetters :: WordSearchGrid -> [String] -> Maybe [[Posn]]
+startLetters css [] = Just []
+startLetters css (w:ws) | isJust positionList = let (Just posn) = positionList
+                                                      in fmap (posn:) (startLetters css ws)
+                        | otherwise = Nothing
+    where
+      positionList = startLetter css 0 0 w
+
+uniqueWord :: WordSearchGrid -> Bool -> (String, [Posn]) -> Bool
+uniqueWord css f (w,[]) = f
+uniqueWord css f (w ,p:ps)
+  | existWord && not f = uniqueWord css True (w, ps) 
+  | existWord && f = False
+  | otherwise = uniqueWord css f (w, ps)
+  where
+    orientations = [Forward, Back, Down , Up, UpForward, DownForward, DownBack, UpBack]
+    existWord = uniqueOrientation css False w p orientations
+-- found = map (uncurry.uncurry $ findWord css) words
+
+uniqueOrientation :: WordSearchGrid -> Bool -> String -> Posn -> [Orientation] -> Bool
+uniqueOrientation css f w p [] = f 
+uniqueOrientation css f w p (o:os)
+  | existWord && not f = uniqueOrientation css True w p os 
+  | existWord && f = False
+  | otherwise = uniqueOrientation css f w p os
+    where
+      existWord = findWord css o w p
+
+findUniqueWords :: WordSearchGrid -> [String] -> Bool
+findUniqueWords css ws  = and $ map (uniqueWord css False) tuples
+ where
+   Just positions = startLetters css ws
+   tuples :: [(String, [Posn])]
+   tuples = zip ws positions
+  
+                                                         
+------------------------------------------------------------
+  
+-- Debug is a function that only puts in the hidden words
+-- in the grid without any random characters
+-- (the rest of the cells just have '0' in them) 
+debug :: [String] -> Double -> IO WordSearchGrid
+debug ws density = insertWords ws gridEmpty
+  where
+    gridN= gridlength ws density
+    gridEmpty = genEmptyGrid gridN
 
  
 --- Convenience functions supplied for testing purposes
@@ -526,21 +398,16 @@ createAndSolve words maxDensity =   do g <- debug words maxDensity
                                        printGrid g
                                        return soln
 
+-- Changed the functions bellow to improve the prettyPrint of the grid
 printGrid :: WordSearchGrid -> IO ()
 printGrid [] = return ()
 printGrid (w:ws) = do printLine w
                       printGrid ws
 
-printLine :: String -> IO ()
-printLine [] = putChar '\n' 
+-- Function that pretty-prints one line of a grid printLine :: String -> IO () printLine [] = putChar '\n' 
 printLine (l:ls) = do putChar l
                       putChar ' '
                       printLine ls
-
-
-cheekyHelp:: IO ()
-cheekyHelp = do puzzle <- createWordSearch ["МАМА", "ПАПА", "ЮЛА", "БАБУШКА", "КАРТОШКА"] 0.9
-                printGrid puzzle
 
 -- Challenge 3 --
 
