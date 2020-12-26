@@ -29,11 +29,6 @@ type Placement = (Posn,Orientation)
 type Posn = (Int,Int)
 data Orientation = Forward | Back | Up | Down | UpForward | UpBack | DownForward | DownBack deriving (Eq,Ord,Show,Read)
 
--- types for Parts II and III
-data LamMacroExpr = LamDef [ (String,LamExpr) ] LamExpr deriving (Eq,Show,Read)
-data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
-               LamAbs Int LamExpr  | LamVar Int deriving (Eq,Show,Read)
-
 -- END OF CODE YOU MUST NOT MODIFY
 
 -- ADD YOUR OWN CODE HERE
@@ -344,7 +339,7 @@ randomChar ls = do index <- randVal 0 (length ls - 1)
 -- Verify Uniqueness of the Grid
 ------------------------------------------------------------
 startLetters :: WordSearchGrid -> [String] -> Maybe [[Posn]]
-startLetters css [] = Just []
+startLetters _ [] = Just []
 startLetters css (w:ws) | isJust positionList = let (Just posn) = positionList
                                                       in fmap (posn:) (startLetters css ws)
                         | otherwise = Nothing
@@ -352,7 +347,7 @@ startLetters css (w:ws) | isJust positionList = let (Just posn) = positionList
       positionList = startLetter css 0 0 w
 
 uniqueWord :: WordSearchGrid -> Bool -> (String, [Posn]) -> Bool
-uniqueWord css f (w,[]) = f
+uniqueWord _ f (w,[]) = f
 uniqueWord css f (w ,p:ps)
   | existWord && not f = uniqueWord css True (w, ps) 
   | existWord && f = False
@@ -363,7 +358,7 @@ uniqueWord css f (w ,p:ps)
 -- found = map (uncurry.uncurry $ findWord css) words
 
 uniqueOrientation :: WordSearchGrid -> Bool -> String -> Posn -> [Orientation] -> Bool
-uniqueOrientation css f w p [] = f 
+uniqueOrientation _ f _ _ [] = f 
 uniqueOrientation css f w p (o:os)
   | existWord && not f = uniqueOrientation css True w p os 
   | existWord && f = False
@@ -411,15 +406,120 @@ printLine (l:ls) = do putChar l
 
 -- Challenge 3 --
 
+-- types for Parts II and III
+data LamMacroExpr = LamDef [ (String,LamExpr) ] LamExpr deriving (Eq,Show,Read)
+data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
+               LamAbs Int LamExpr  | LamVar Int deriving (Eq,Show,Read)
+
+-- Function to pretty print the given LamMacroExpr
+-- First it simplifies the macros
+-- Happens when an inner macro has a sub-expression which is an outer macro
+-- Then subsitutes the macros in the expression multiple times
+-- Until there is no change in expression.
+-- Done more than once since a bigger macro might not be recognised at first
+-- After it has been simplified.
+-- Finally, it formats the LamMacroExp as specified
 prettyPrint :: LamMacroExpr -> String
-prettyPrint _ = ""
+prettyPrint (LamDef [] e) = formatLamExpr e
+prettyPrint (LamDef m  e) = formatMacros macros ++ formatLamExpr final
+  where
+    macros     = simplifyMacros m 
+    expression = iterate (exploreExpr macros) e
+    -- Lines taken from Lecture "Implementing Evaluation"
+    list       = zip expression (tail expression)
+    final      = (fst . head . dropWhile(uncurry(/=))) list
+
+-- Formatting Macros and the Expression to a specified format
+------------------------------------------------------------
+-- Function that creates the string out of the given list of macros definitions
+-- First part of the LanMacroExpr type
+formatMacros :: [(String, LamExpr)] -> String
+formatMacros []          = ""
+formatMacros ((l, e):ms) = "def " ++ l ++ " = " ++ formatLamExpr e ++ " in " ++ formatMacros ms 
+
+-- Function that creates a pretty string out of the given expression
+-- Second part of the LanMacroExpr type
+formatLamExpr :: LamExpr -> String
+formatLamExpr (LamMacro v)   = v 
+formatLamExpr (LamAbs num e) = "\\" ++ formatLamExpr (LamVar num) ++ " -> " ++ formatLamExpr e
+formatLamExpr (LamApp e1 e2) 
+  |isAbstraction e1          = "(" ++ formatLamExpr e1 ++ ")" ++ " " ++ formatLamExpr e2
+  |isApplication e2          = formatLamExpr e1 ++ " " ++ "(" ++ formatLamExpr e2 ++ ")"
+  |otherwise                 = formatLamExpr e1 ++ " " ++ formatLamExpr e2
+formatLamExpr (LamVar num)   = "x" ++ show num
+------------------------------------------------------------
+
+-- Simplifying Macros and the Expression using other Macros
+------------------------------------------------------------
+-- Function that searches the expressions of the macros for any sub-expressions
+-- That are defined in the outer macros
+-- Note that this function requires an inverse input of macros (from innermost to outermos)
+-- This is for the ease of recursion (inner one can be expressed as any of the outer ones) 
+exploreMacros :: [(String, LamExpr)] -> [(String, LamExpr)]
+exploreMacros [] = []
+exploreMacros (m@(name, e):ms) 
+  | e /=new   = (name, new) : exploreMacros ms 
+  | otherwise = m : exploreMacros ms
+  where
+    new = exploreExpr ms e
+
+-- Function that searches the expression for any sub-expressions
+-- That are defined as given macros
+exploreExpr :: [(String, LamExpr)] -> LamExpr -> LamExpr
+exploreExpr ms e | isJust m   = LamMacro name 
+  where
+    m = check ms e
+    Just name = fmap fst m
+exploreExpr _ (LamMacro v)    = LamMacro v
+exploreExpr _ (LamVar num)    = LamVar num
+exploreExpr ms (LamAbs num e) = LamAbs num (exploreExpr ms e) 
+exploreExpr ms (LamApp e1 e2) = LamApp (exploreExpr ms e1) (exploreExpr ms e2)
+
+-- Function that checks particular expression against available 
+-- Macros and returns a macro it matches to or Nothing 
+-- If there isn't such
+check :: [(String, LamExpr)] -> LamExpr -> Maybe (String, LamExpr)
+check [] _ = Nothing
+check (m@(_, exp):ms) e 
+  | exp == e  = Just m
+  | otherwise = check ms e
+------------------------------------------------------------
+
+-- Additional Helper Functions
+------------------------------------------------------------
+-- Function that checks if an expression is an Abstraction
+-- Used for bracketing purposes
+isAbstraction :: LamExpr -> Bool
+isAbstraction (LamAbs _ _) = True
+isAbstraction _            = False
+
+-- Function that checks if an expression is an Application
+-- Used for bracketing purposes
+isApplication :: LamExpr -> Bool
+isApplication (LamApp _ _) = True
+isApplication _            = False
+
+-- Function that reverses the macros table, feeds it to exploreMacros
+-- And reverses it back to how it was
+-- Check exploreMacros for the reason behind reversing it
+simplifyMacros :: [(String, LamExpr)] -> [(String, LamExpr)]
+simplifyMacros = reverse.exploreMacros.reverse
+------------------------------------------------------------
+
+-- TODO: INTERESTING THING TO POINT OUT
+-- If the guards for one part fail, it will continue pattern matching for the others
 
 -- examples in the instructions
 ex3'1 = LamDef [] (LamApp (LamAbs 1 (LamVar 1)) (LamAbs 1 (LamVar 1)))
 ex3'2 = LamDef [] (LamAbs 1 (LamApp (LamVar 1) (LamAbs 1 (LamVar 1))))
 ex3'3 = LamDef [ ("F", LamAbs 1 (LamVar 1) ) ] (LamAbs 2 (LamApp (LamVar 2) (LamMacro "F")))
 ex3'4 = LamDef [ ("F", LamAbs 1 (LamVar 1) ) ] (LamAbs 2 (LamApp (LamAbs 1 (LamVar 1)) (LamVar 2))) 
-
+ex3'5 = LamDef [("F", LamAbs 1 (LamVar 1)), ("G", LamApp(LamAbs 1 (LamVar 1)) (LamVar 2))] (LamAbs 1 (LamVar 1))
+ex3'6 = LamDef [("F", LamAbs 1 (LamVar 1)), ("G", LamAbs 2 (LamAbs 1 (LamVar 1)))] (LamApp(LamAbs 2 (LamAbs 1 (LamVar 1))) (LamVar 2))
+ex3'7 = LamDef [] (LamAbs 3 (LamApp (LamAbs 6 (LamApp (LamVar 6) (LamVar 1))) (LamAbs 4 (LamApp (LamAbs 7 (LamApp (LamVar 7)  (LamVar 2))) (LamAbs 5 (LamApp (LamApp (LamVar 4) (LamVar 5)) (LamVar 3)))))))
+ex3'8 = LamDef [("F", LamAbs 2 (LamAbs 1 (LamVar 1))),("G", LamAbs 1 (LamVar 1))] (LamApp (LamVar 3) (LamApp (LamVar 1) (LamVar 2)))
+ex3'9 = LamDef []  (LamApp(LamAbs 1 (LamAbs 2 (LamVar 1))) (LamVar 2))
+ex3'10 = LamDef [] (LamAbs 2(LamAbs 1(LamAbs 0 (LamVar 0))))
 
 -- Challenge 4 --
 
