@@ -33,6 +33,9 @@ data Orientation = Forward | Back | Up | Down | UpForward | UpBack | DownForward
 
 -- ADD YOUR OWN CODE HERE
 
+-- AUTHOR: Aleksei Martirosov
+-- Solutions to challenges from 1 to 6
+
 -- Challenge 1 --
 
 -- Should work with no words as well
@@ -421,7 +424,9 @@ data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
 -- Finally, it formats the LamMacroExp as specified
 prettyPrint :: LamMacroExpr -> String
 prettyPrint (LamDef [] e) = formatLamExpr e
-prettyPrint (LamDef m  e) = formatMacros macros ++ formatLamExpr final
+prettyPrint (LamDef m  e) 
+  | illegalMacros $ reverse m       = error "A macro contains Illegal Macros. It cannot contain itself, any undefined ones or the ones which were not defined before itself"
+  | otherwise = formatMacros macros ++ formatLamExpr final
   where
     macros     = simplifyMacros m 
     expression = iterate (exploreExpr macros) e
@@ -429,6 +434,27 @@ prettyPrint (LamDef m  e) = formatMacros macros ++ formatLamExpr final
     list       = zip expression (tail expression)
     final      = (fst . head . dropWhile(uncurry(/=))) list
 
+-- TODO : Good convention is to first do something in the wrong case (when talking about guards) and then otherwise the "good one" (The one where we succeed)
+-- Ask dom about it, it might not work with haskell
+-- Error Check
+------------------------------------------------------------
+illegalMacros :: [(String, LamExpr)] -> Bool
+illegalMacros []                         = False
+illegalMacros ((_, e) : ms) 
+  | null illegal                   = illegalMacros ms
+  | otherwise                            = True
+   where
+     allowedMacros = [n | (n, _) <- ms]
+     containedMacros = containsMacros e []  
+     illegal = filter (`notElem` allowedMacros) containedMacros
+
+containsMacros :: LamExpr -> [String] -> [String]
+containsMacros (LamVar _)     ms = ms 
+containsMacros (LamMacro m)   ms = m:ms
+containsMacros (LamAbs _ e)   ms = containsMacros e ms
+containsMacros (LamApp e1 e2) ms = ms ++ containsMacros e1 [] ++ containsMacros e2 []
+------------------------------------------------------------
+  
 -- Formatting Macros and the Expression to a specified format
 ------------------------------------------------------------
 -- Function that creates the string out of the given list of macros definitions
