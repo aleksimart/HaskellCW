@@ -409,11 +409,6 @@ printLine (l:ls) = do putChar l
 
 -- Challenge 3 --
 
--- types for Parts II and III
-data LamMacroExpr = LamDef [ (String,LamExpr) ] LamExpr deriving (Eq,Show,Read)
-data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
-               LamAbs Int LamExpr  | LamVar Int deriving (Eq,Show,Read)
-
 -- Function to pretty print the given LamMacroExpr
 -- First it simplifies the macros
 -- Happens when an inner macro has a sub-expression which is an outer macro
@@ -469,8 +464,8 @@ formatLamExpr :: LamExpr -> String
 formatLamExpr (LamMacro v)   = v 
 formatLamExpr (LamAbs num e) = "\\" ++ formatLamExpr (LamVar num) ++ " -> " ++ formatLamExpr e
 formatLamExpr (LamApp e1 e2) 
-  |isAbstraction e1          = "(" ++ formatLamExpr e1 ++ ")" ++ " " ++ formatLamExpr e2
-  |isApplication e2          = formatLamExpr e1 ++ " " ++ "(" ++ formatLamExpr e2 ++ ")"
+  |isAbstraction e1          = "(" ++ formatLamExpr e1 ++ ") " ++ formatLamExpr e2
+  |isApplication e2          = formatLamExpr e1 ++ " (" ++ formatLamExpr e2 ++ ")"
   |otherwise                 = formatLamExpr e1 ++ " " ++ formatLamExpr e2
 formatLamExpr (LamVar num)   = "x" ++ show num
 ------------------------------------------------------------
@@ -549,9 +544,163 @@ ex3'10 = LamDef [] (LamAbs 2(LamAbs 1(LamAbs 0 (LamVar 0))))
 
 -- Challenge 4 --
 
-parseLamMacro :: String -> Maybe LamMacroExpr
-parseLamMacro _ = Nothing 
+-- types for Parts II and III
+data LamMacroExpr = LamDef [ (String,LamExpr) ] LamExpr deriving (Eq,Show,Read)
+data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
+               LamAbs Int LamExpr  | LamVar Int deriving (Eq,Show,Read)
 
+
+-- Function Parses the given String and returns LamMacroExpr, if the syntax is correct
+-- First it checks if the macros are defined correctly (all the rules are followed) by parsing the definitions
+-- Then it parses the expression.
+-- Will return nothing if:
+--    1. Invalid macros definitions (check functions below for the rules)
+--    2. Invalid expression definition 
+parseLamMacro :: String -> Maybe LamMacroExpr
+parseLamMacro exp
+  | not $ macrosCheck exp =  Nothing
+  | null expression = Nothing
+  | not $ null unparsed  = Nothing
+  | otherwise = Just parsed
+  where
+    expression = parse macrosExpr exp
+    unparsed = snd $ head expression
+    parsed = fst $ head expression 
+
+-- Checks for Macros
+------------------------------------------------------------
+-- Function that checks the parse macros list against the same macros list
+-- filtered according to rules defined in filterMacros function
+macrosCheck :: String -> Bool
+macrosCheck exp = macros == filterMacros macros
+  where macrosParsed = parse (many macrosMap) exp
+        macros = fst $ head macrosParsed
+
+-- Parser that parses all the macros definitions with extra restrictions
+-- 1. If there are free variables in any of the macros, it will return []
+-- 2. If the same macro is defined twice, it will also return []
+filterMacros :: [(String, LamExpr)] -> [(String, LamExpr)]
+filterMacros ms 
+  | length names /= length unique = []
+  | free = []
+  | otherwise = ms
+  where 
+    names = map fst ms 
+    unique = nub names
+    free = any (checkFreeVariables.snd) ms
+-- free = or $ map (checkFreeVariables.snd) ms 
+
+-- Check if all the variables in the given expression are closed
+checkFreeVariables :: LamExpr -> Bool                         
+checkFreeVariables e = let vars = getVariables e in
+                           any (free e) vars
+-- or $ map (free e)  vars
+
+-- Gets all the variables out of an expression
+getVariables :: LamExpr -> [Int]
+getVariables (LamVar y) = [y]
+getVariables (LamMacro _) = []
+getVariables (LamAbs y e) = [y] ++ getVariables e
+getVariables (LamApp e1 e2) = getVariables e1 ++ getVariables e2 
+
+-- From Prog3 Lectures
+-- Checks if a given variable is free in a given expression
+free ::  LamExpr -> Int -> Bool
+free (LamVar y) x= x == y
+free (LamAbs y e) x
+  | x == y = False
+  | x /= y = free e x
+free (LamApp e1 e2) x = free e1 x || free e2 x
+------------------------------------------------------------
+
+-- Parsers for Macros
+------------------------------------------------------------
+  
+-- Parser that first parses all the macros definitions and then the actual expression
+macrosExpr :: Parser LamMacroExpr 
+macrosExpr = LamDef <$> many macrosMap <*> expr
+
+-- Parser that parses all the macros definitions
+macrosMap :: Parser (String, LamExpr)
+macrosMap = do token (string "def")
+               name <- some upper
+               token (char '=')
+               e <- expr
+               token (string "in")
+               return (name, e)
+------------------------------------------------------------
+
+-- Parsers for each part of the Grammar
+--
+-- The update in the given grammar is:
+--    Expr ::= abs int Expr   | Term
+--    Term ::= app term Fact  | Fact
+--    Fact ::= '(' expr ')'   | Var  | MacroName
+--
+-- The rest is the same as defined in the challenge
+-- This update ensures that the precendence and associativity rules are being followed
+------------------------------------------------------------
+  
+-- Parser for Expr in given grammar
+expr :: Parser LamExpr
+expr = abst <|> term
+
+-- Parser for Term in given grammar
+-- Uses left-associativity parsing for app
+term :: Parser LamExpr
+term =  fact `chainl1` app
+
+-- Parser for fact in given grammar
+fact :: Parser LamExpr
+fact = do token(char '(')
+          e <- expr
+          token(char ')')
+          return e 
+      <|> macro <|> var
+
+-- Parser for app in given grammar
+-- Only returns the function, because parsing it requires
+-- Left associativity rules (using function chainl1)
+app  :: Parser (LamExpr -> LamExpr -> LamExpr)
+app  = return LamApp
+
+-- Parser for abs int Expr in given grammar  
+abst :: Parser LamExpr
+abst = do token (string "\\x")
+          val <- some digit 
+          token (string "->")
+          LamAbs (read val) <$> expr
+
+-- Parser for MacroName in given grammar
+macro :: Parser LamExpr
+macro = do space
+           LamMacro <$> some upper 
+
+-- Parser for Var in given grammar
+var :: Parser LamExpr
+var = do token (char 'x')
+         LamVar . read <$> some digit
+
+-- Function from the paper by Graham Hutton and Erik Meijer
+-- Parses repeated applications of a parser p separated by applications
+-- Of op whose result is the operator 'app' (for this particular scenario), defined above.
+-- Specifically created for operations that associate to the left
+chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
+p `chainl1` op = do {a <- p; rest a}
+                 where
+                   rest a = (do f <- op
+                                b <- p
+                                rest (f a b)) 
+                            <|>return a
+------------------------------------------------------------
+  
+-- Examples
+ex4'1 = "x1 (x2 x3)"
+ex4'2 = "x1 x2 F"
+ex4'3 = "def F = \\x1-> x1 in \\x2 -> x2 F"
+ex4'4 = "def F = \\x1 -> x1 (def G= \\x1 -> x1 in x1)in \\x2 -> x2"
+ex4'5 = "def F = \\x1 -> x1 in def F = \\x2 -> x2 x1 in x1"
+ex4'6 = "def F = x1 in F"
 
 -- Challenge 5
 
