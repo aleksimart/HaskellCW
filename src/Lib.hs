@@ -544,10 +544,6 @@ ex3'10 = LamDef [] (LamAbs 2(LamAbs 1(LamAbs 0 (LamVar 0))))
 
 -- Challenge 4 --
 
--- types for Parts II and III
-data LamMacroExpr = LamDef [ (String,LamExpr) ] LamExpr deriving (Eq,Show,Read)
-data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
-               LamAbs Int LamExpr  | LamVar Int deriving (Eq,Show,Read)
 
 
 -- Function Parses the given String and returns LamMacroExpr, if the syntax is correct
@@ -704,15 +700,71 @@ ex4'6 = "def F = x1 in F"
 
 -- Challenge 5
 
+-- types for Parts II and III
+data LamMacroExpr = LamDef [ (String,LamExpr) ] LamExpr deriving (Eq,Show,Read)
+data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
+               LamAbs Int LamExpr  | LamVar Int deriving (Eq,Show,Read)
+
 cpsTransform :: LamMacroExpr -> LamMacroExpr
-cpsTransform _ = LamDef [] (LamVar 0)
+cpsTransform me@(LamDef ms e) = LamDef macros (snd expr)
+  where 
+    max = getValue me
+    macros = transitionMacros (fst expr, ms)
+    expr = transitionExpr (inc max, e)
+
+getValue :: LamMacroExpr -> Int
+getValue (LamDef m e) | macro > expr = macro
+  | otherwise = expr
+  where
+    macro = maxMacroVal 0 m
+    expr = getMax $ getVariables e
+
+
+maxMacroVal :: Int -> [(String, LamExpr)] -> Int
+maxMacroVal v [] = v
+maxMacroVal v ((_, expr): ms)  
+  |v > local =  maxMacroVal v ms
+  | otherwise = maxMacroVal local ms
+  where
+    local = getMax $ getVariables expr
+
+getMax :: [Int] -> Int
+getMax = foldr (\x y -> if x >= y then x else y) 0
+
+transitionMacros :: (Int, [(String, LamExpr)]) -> [(String, LamExpr)]
+transitionMacros (_, []) = []
+transitionMacros (val, (n, e):ms)= (n, snd expression) : transitionMacros (fst expression, ms)
+  where
+    expression = transitionExpr (val, e)
+
+-- HMMM Maybe also (Int, LamExpr)
+transitionExpr :: (Int, LamExpr) -> (Int, LamExpr)
+transitionExpr (val, v@(LamVar _)) = (val+1, LamAbs val (LamApp (LamVar val) v))
+transitionExpr (val, m@(LamMacro _))= (val, m)
+transitionExpr (val, LamAbs x e) = (available, csp)
+  where
+    expr = transitionExpr (val+1, e) 
+    available = fst expr
+    evaluated = snd expr
+    csp = LamAbs val (LamApp (LamVar val) (LamAbs x evaluated)) 
+
+transitionExpr (k, LamApp e1 e2) = (fst expr2 ,csp)
+  where
+    expr1 = transitionExpr (inc e, e1)
+    expr2 = transitionExpr (fst expr1 , e2)
+    f = inc k 
+    e = inc f
+    csp = LamAbs k (LamApp (snd expr1) (LamAbs f (LamApp (snd expr2) (LamAbs e (LamApp (LamApp (LamVar f) (LamVar e)) (LamVar k))))))
+   
+inc :: Int -> Int
+inc a = a+1
 
 -- Examples in the instructions
-exId =  (LamDef [] (LamAbs 1 (LamVar 1)))
-ex5'1 = (LamApp (LamVar 1) (LamVar 2))
--- ex5'2 = (LamDef [ ("F", exId) ] (LamVar 2) )
--- ex5'3 = (LamDef [ ("F", exId) ] (LamMacro "F") )
--- ex5'4 = (LamDef [ ("F", exId) ] (LamApp (LamMacro "F") (LamMacro "F")))
+exId =  (LamAbs 1 (LamVar 1))
+ex5'1 = (LamDef [] (LamApp (LamVar 1) (LamVar 2)))
+ex5'2 = (LamDef [ ("F", exId) ] (LamVar 2) )
+ex5'3 = (LamDef [ ("F", exId) ] (LamMacro "F") )
+ex5'4 = (LamDef [ ("F", exId) ] (LamApp (LamMacro "F") (LamMacro "F")))
 
 
 -- Challenge 6
