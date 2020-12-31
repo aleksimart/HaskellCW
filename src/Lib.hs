@@ -470,6 +470,7 @@ formatLamExpr :: LamExpr -> String
 formatLamExpr (LamMacro v)   = v 
 formatLamExpr (LamAbs num e) = "\\" ++ formatLamExpr (LamVar num) ++ " -> " ++ formatLamExpr e
 formatLamExpr (LamApp e1 e2) 
+  |isAbstraction e1 && isApplication e2 = "(" ++ formatLamExpr e1 ++ ") " ++ " (" ++ formatLamExpr e2 ++ ")"
   |isAbstraction e1          = "(" ++ formatLamExpr e1 ++ ") " ++ formatLamExpr e2
   |isApplication e2          = formatLamExpr e1 ++ " (" ++ formatLamExpr e2 ++ ")"
   |otherwise                 = formatLamExpr e1 ++ " " ++ formatLamExpr e2
@@ -518,6 +519,7 @@ check (m@(_, exp):ms) e
 -- Used for bracketing purposes
 isAbstraction :: LamExpr -> Bool
 isAbstraction (LamAbs _ _) = True
+isAbstraction (LamApp _ e) = isAbstraction e
 isAbstraction _            = False
 
 -- Function that checks if an expression is an Application
