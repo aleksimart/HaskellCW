@@ -390,12 +390,18 @@ debug ws density = insertWords ws gridEmpty
 
  
 --- Convenience functions supplied for testing purposes
+-- createAndSolve :: [ String ] -> Double -> IO [ (String, Maybe Placement) ]
+-- createAndSolve words maxDensity =   do g <- debug words maxDensity
+--                                        let soln = solveWordSearch words g
+--                                        printGrid g
+--                                        return soln
+--
 createAndSolve :: [ String ] -> Double -> IO [ (String, Maybe Placement) ]
-createAndSolve words maxDensity =   do g <- debug words maxDensity
+createAndSolve words maxDensity =   do g <- createWordSearch words maxDensity
                                        let soln = solveWordSearch words g
                                        printGrid g
                                        return soln
-
+                                       
 -- Changed the functions bellow to improve the prettyPrint of the grid
 printGrid :: WordSearchGrid -> IO ()
 printGrid [] = return ()
@@ -652,17 +658,18 @@ fact = do token(char '(')
           e <- expr
           token(char ')')
           return e 
-      <|> macro <|> var
+      <|> abst <|> macro <|> var
 
 -- Parser for app in given grammar
 -- Only returns the function, because parsing it requires
 -- Left associativity rules (using function chainl1)
 app  :: Parser (LamExpr -> LamExpr -> LamExpr)
+-- TODO: Added space
 app  = return LamApp
 
 -- Parser for abs int Expr in given grammar  
 abst :: Parser LamExpr
-abst = do token (string "\\x")
+abst = do string "\\x"
           val <- some digit 
           token (string "->")
           LamAbs (read val) <$> expr
@@ -674,17 +681,26 @@ macro = do space
 
 -- Parser for Var in given grammar
 var :: Parser LamExpr
-var = do token (char 'x')
+var = do space
+         char 'x'
          LamVar . read <$> some digit
+
+-- digits :: Parser String
+-- digits =    do  e <- digit 
+--                 return [e]
+--         <|> do  e <- digit 
+--                 t <- digits
+--                 return (e:t)
 
 -- Function from the paper by Graham Hutton and Erik Meijer
 -- Parses repeated applications of a parser p separated by applications
 -- Of op whose result is the operator 'app' (for this particular scenario), defined above.
 -- Specifically created for operations that associate to the left
 chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
-p `chainl1` op = do {a <- p; rest a}
+p `chainl1` op = do {space; a <- p; rest a}
                  where
-                   rest a = (do f <- op
+                   rest a = (do space 
+                                f <- op
                                 b <- p
                                 rest (f a b)) 
                             <|>return a
