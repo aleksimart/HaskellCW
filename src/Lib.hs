@@ -658,7 +658,8 @@ term =  fact `chainl1` app
 fact :: Parser LamExpr
 fact = do token(char '(')
           e <- expr
-          token(char ')')
+          space
+          char ')'
           return e 
       <|> abst <|> macro <|> var
 
@@ -667,7 +668,8 @@ fact = do token(char '(')
 -- Left associativity rules (using function chainl1)
 app  :: Parser (LamExpr -> LamExpr -> LamExpr)
 -- TODO: Added space
-app  = return LamApp
+app  = do char ' '
+          return LamApp
 
 -- Parser for abs int Expr in given grammar  
 abst :: Parser LamExpr
@@ -699,10 +701,9 @@ var = do space
 -- Of op whose result is the operator 'app' (for this particular scenario), defined above.
 -- Specifically created for operations that associate to the left
 chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
-p `chainl1` op = do {space; a <- p; rest a}
+p `chainl1` op = do {a <- p; rest a}
                  where
-                   rest a = (do space 
-                                f <- op
+                   rest a = (do f <- op
                                 b <- p
                                 rest (f a b)) 
                             <|>return a
