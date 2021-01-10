@@ -552,8 +552,6 @@ ex3'10 = LamDef [] (LamAbs 2(LamAbs 1(LamAbs 0 (LamVar 0))))
 
 -- Challenge 4 --
 
-
-
 -- Function Parses the given String and returns LamMacroExpr, if the syntax is correct
 -- First it checks if the macros are defined correctly (all the rules are followed) by parsing the definitions
 -- Then it parses the expression.
@@ -611,6 +609,8 @@ getVariables (LamApp e1 e2) = getVariables e1 ++ getVariables e2
 -- Checks if a given variable is free in a given expression
 free ::  LamExpr -> Int -> Bool
 free (LamVar y) x= x == y
+-- Cheeky
+free (LamMacro _) _ = False
 free (LamAbs y e) x
   | x == y = False
   | x /= y = free e x
@@ -789,34 +789,221 @@ ex5'4 = (LamDef [ ("F", exId) ] (LamApp (LamMacro "F") (LamMacro "F")))
 -- Challenge 6
 
 innerRedn1 :: LamMacroExpr -> Maybe LamMacroExpr
-innerRedn1 _ = Nothing
+innerRedn1 (LamDef _ (LamVar _)) = Nothing
+innerRedn1 (LamDef ms (LamMacro x)) = Just (LamDef ms (macroLookup ms x))
+-- innerRedn1 (LamDef ms  (LamAbs x e)) | isJust inner = 
+--   where
+--     inner = innerRedn1 e
+
 
 outerRedn1 :: LamMacroExpr -> Maybe LamMacroExpr
 outerRedn1 _ = Nothing
 
 compareInnerOuter :: LamMacroExpr -> Int -> (Maybe Int,Maybe Int,Maybe Int,Maybe Int)
-compareInnerOuter _ _ = (Nothing,Nothing,Nothing,Nothing) 
+compareInnerOuter expr val = (reductions innerRedn expr val, reductions outerRedn expr val, reductions innerRedn (toCps (getValue expr) expr) val, reductions outerRedn (toCps (getValue expr) expr) val ) 
 
+-- Beta-reduction functions
+------------------------------------------------------------
+
+reductions :: (Int -> LamMacroExpr -> Maybe LamMacroExpr) -> LamMacroExpr -> Int -> Maybe Int
+reductions strat e 0   = case strat (inc $ getValue e) e of
+                           Nothing -> Just 0
+                           Just _  -> Nothing
+reductions strat e max = case strat (inc $ getValue e) e of
+                           Just reduced -> (1+) <$> reductions strat reduced (max - 1)
+                           Nothing      -> Just 0
+
+
+            
+
+-- reductions strat e 0 
+--   | isJust reduced = Nothing
+--   | otherwise = Just 0
+--   where
+--     nextFree = inc $ getValue e
+--     reduced = strat nextFree e
+-- reductions strat e max 
+--   | isJust reduced = fmap (1+) (reductions strat a (max - 1))
+--   | otherwise = Just 0
+--   where
+--     nextFree = inc $ getValue e
+--     reduced = strat nextFree e
+--     Just a = reduced
+
+
+-- alt :: Maybe (Int -> LamMacroExpr -> Maybe LamMacroExpr) -> Maybe a -> Maybe a
+-- alt a b = \inp -> case a inp of
+--                     Nothing -> b inp
+--                     Just c -> Just c
+
+-- reductions strat e = [p | p <- zip evals (tail evals)]
+--   where
+--     evals = iterate $ strat nextFree 
+--     nextFree = inc $ getValue e
+
+
+
+-- Todo, maybe return max
+-- innerRedn :: Int -> LamMacroExpr -> Maybe LamMacroExpr
+-- innerRedn max (LamDef macros expr) 
+--   | expr == innerExpr && null macros       = Nothing 
+--   | expr == innerExpr && (not.null) macros = Just (subMacros (reverse macros) expr)
+--   | otherwise                              = Just (LamDef macros innerExpr)
+--   where
+--     innerExpr = innerExprRedn max expr
+
+innerRedn :: Int -> LamMacroExpr -> Maybe LamMacroExpr
+innerRedn max (LamDef macros expr) = do inner <- innerExprRedn max expr
+                                        return (LamDef macros inner)
+                                    <|> if null macros
+                                           then
+                                           Nothing
+                                           else
+                                           Just (LamDef (init macros) (subMacro (last macros) expr))
+
+outerRedn :: Int -> LamMacroExpr -> Maybe LamMacroExpr
+outerRedn max (LamDef macros expr) = if null macros
+                                        then
+                                        do inner <- outerExprRedn max expr
+                                           return (LamDef macros inner)
+                                        else
+                                        Just (LamDef (tail macros) (subMacro (head macros) expr))
+
+
+toCps ::Int -> LamMacroExpr -> LamMacroExpr
+toCps nextFree expr = LamDef macros (LamApp transformed (LamAbs nextFree (LamVar nextFree)))
+  where
+    LamDef macros transformed = cpsTransform expr
+-- | expr == innerExpr && null macros       = Nothing 
+-- | expr == innerExpr && (not.null) macros = Just (subMacros (reverse macros) expr)
+-- | otherwise                              = Just (LamDef macros innerExpr)
+-- where
+--   innerExpr = innerExprRedn max expr
+
+-- Actually don't need that because even if the macro is empty, I still count it as reduction
+subMacros :: [(String, LamExpr)] -> LamExpr -> LamMacroExpr
+subMacros [] expr = LamDef [] expr
+subMacros (macro:macros) expr 
+  | expr == innerExpr = subMacros macros expr
+  | otherwise         = LamDef (reverse macros) innerExpr
+  where
+    innerExpr = subMacro macro expr
+
+subMacro :: (String, LamExpr) -> LamExpr -> LamExpr
+subMacro macro expr@(LamVar _)           = expr
+subMacro (name, mexpr) expr@(LamMacro x) 
+  | name == x                            = mexpr
+  | otherwise                            = expr
+subMacro macro (LamAbs val expr)         = LamAbs val (subMacro macro expr)
+subMacro macro (LamApp e1 e2)            = LamApp (subMacro macro e1) (subMacro macro e2)
+
+-- innerRedn _ ms (LamMacro x) = Lam
+-- innerRedn _ ms e@(LamVar x) = LamDef ms e
+-- innerRedn _ ms e@(LamAbs _ _) =  LamDef ms e
+-- innerRedn max ms (LamApp (LamAbs x e1) e@(LamAbs y e2)) = LamDef ms (snd $ subst (inc max) e1 x e)
+-- innerRedn max ms (LamApp (LamAbs x e1) e@(LamVar y)) = LamDef ms (snd $ subst (inc max) e1 x e)
+-- innerRedn max ms (LamApp e@(LamAbs x e1) e2) = LamDef macros (LamApp e expr)
+--   where
+--     LamDef macros expr = eval1cbv max ms e2
+-- eval1cbv max ms (LamApp e1 e2) = LamDef macros (LamApp expr e2)
+--   where
+--     LamDef macros expr = eval1cbv max ms e1
+
+-- innerExprRedn :: Int -> LamExpr -> LamExpr
+-- innerExprRedn _ expr@(LamMacro _)      = expr
+-- innerExprRedn _ expr@(LamVar _)        = expr
+-- innerExprRedn max (LamAbs val expr)    = LamAbs val (innerExprRedn max expr)
+-- innerExprRedn max (LamApp (LamAbs val expr1) expr2) 
+--   | expr1 == leftInner                 = snd $ subst max expr1 val expr2
+--   | otherwise                          = LamApp leftInner expr2
+--   where
+--     leftInner = innerExprRedn max expr1
+-- innerExprRedn max (LamApp expr1 expr2) 
+--   | expr1 == leftInner                 = LamApp expr1 (innerExprRedn max expr2) 
+--   | otherwise                          = LamApp leftInner expr2
+--   where
+--     leftInner = innerExprRedn max expr1
+
+innerExprRedn :: Int -> LamExpr -> Maybe LamExpr
+innerExprRedn _ expr@(LamMacro _)      = Nothing
+innerExprRedn _ expr@(LamVar _)        = Nothing
+innerExprRedn max (LamAbs val expr)    = do inner <- innerExprRedn max expr
+                                            return (LamAbs val inner)
+innerExprRedn max (LamApp lam@(LamAbs val expr1) expr2) = do inner <- innerExprRedn max expr1
+                                                             return (LamApp (LamAbs val inner) expr2)
+                                                      <|> do inner <- innerExprRedn max expr2
+                                                             return (LamApp lam inner)
+                                                      <|>return (snd $ subst max expr1 val expr2)
+-- innerExprRedn max (LamApp expr2@(LamVar _) (LamAbs val expr1)) = do inner <- innerExprRedn max expr1
+--                                                                     return (LamApp expr2 (LamAbs val inner))
+--                                                                  <|>return (snd $ subst max expr1 val expr2)
+innerExprRedn max (LamApp expr1 expr2) = do inner <- innerExprRedn max expr1
+                                            return (LamApp inner expr2)
+                                         <|>do inner <- innerExprRedn max expr2
+                                               return (LamApp expr1 inner)
+
+outerExprRedn :: Int -> LamExpr -> Maybe LamExpr
+outerExprRedn _ expr@(LamMacro _)      = Nothing
+outerExprRedn _ expr@(LamVar _)        = Nothing
+outerExprRedn max (LamAbs val expr)    = do inner <- outerExprRedn max expr
+                                            return (LamAbs val inner)
+outerExprRedn max (LamApp (LamAbs val expr1) expr2) = return (snd $ subst max expr1 val expr2)
+outerExprRedn max (LamApp expr1 expr2) = do inner <- outerExprRedn max expr1
+                                            return (LamApp inner expr2)
+                                         <|>do inner <- outerExprRedn max expr2
+                                               return (LamApp expr1 inner)
+
+subst :: Int -> LamExpr -> Int -> LamExpr -> (Int, LamExpr)  
+subst max (LamVar x) y expr 
+  | x == y                                      = (max, expr)
+  | x /= y                                      = (max, LamVar x)
+subst max (LamMacro x) _ _                      = (max, LamMacro x)
+subst max (LamAbs x e1) y e 
+  | x /= y && not (free e x)                    = (max, LamAbs x inner1)
+  | x /= y && free e x                          = subst (fst inner2Tuple) (LamAbs max (snd inner2Tuple)) y e
+  | x == y                                      = (max, LamAbs x e1)
+  where
+    inner1 = snd $ subst max e1 y e
+    inner2Tuple = subst (inc max) e1 x (LamVar max)
+subst x' (LamApp e1 e2) y e                     = (fst expr2Tuple, LamApp (snd expr1Tuple) (snd expr2Tuple))
+  where
+    expr1Tuple = subst x' e1 y e
+    expr2Tuple = subst (fst expr1Tuple) e2 y e
+
+-- substMacro :: [(String, LamExpr)] -> LamExpr -> LamExpr
+-- substMacro ms (LamMacro m) = macroLookup m
+
+-- subst ms (LamMacro x) _ _  = macroLookup ms x
+macroLookup :: [(String, LamExpr)] -> String -> LamExpr
+macroLookup ms name = getExpr $ dropWhile (\(x,_) -> x /= name)  ms
+  where
+    getExpr = snd . head
+
+------------------------------------------------------------
+  
 -- Examples in the instructions
 
--- (\x1 -> x1 x2)
--- ex6'1 = LamDef [] (LamAbs 1 (LamApp (LamVar 1) (LamVar 2)))
+--  (\x1 -> x1 x2)
+ex6'1 = LamDef [] (LamAbs 1 (LamApp (LamVar 1) (LamVar 2)))
 
--- --  def F = \x1 -> x1 in F  
--- ex6'2 = LamDef [ ("F",exId) ] (LamMacro "F")
+--  def F = \x1 -> x1 in F  
+ex6'2 = LamDef [ ("F",exId) ] (LamMacro "F")
 
--- --  (\x1 -> x1) (\x2 -> x2)   
--- ex6'3 = LamDef [] ( LamApp exId (LamAbs 2 (LamVar 2)))
+--  (\x1 -> x1) (\x2 -> x2)   
+ex6'3 = LamDef [] ( LamApp exId (LamAbs 2 (LamVar 2)))
 
--- --  (\x1 -> x1 x1)(\x1 -> x1 x1)  
--- wExp = (LamAbs 1 (LamApp (LamVar 1) (LamVar 1)))
--- ex6'4 = LamDef [] (LamApp wExp wExp)
+--  (\x1 -> x1 x1)(\x1 -> x1 x1)  
+wExp = (LamAbs 1 (LamApp (LamVar 1) (LamVar 1)))
+ex6'4 = LamDef [] (LamApp wExp wExp)
 
--- --  def ID = \x1 -> x1 in def FST = (\x1 -> λx2 -> x1) in FST x3 (ID x4) 
--- ex6'5 = LamDef [ ("ID",exId) , ("FST",LamAbs 1 (LamAbs 2 (LamVar 1))) ] ( LamApp (LamApp (LamMacro "FST") (LamVar 3)) (LamApp (LamMacro "ID") (LamVar 4)))
+--  def ID = \x1 -> x1 in def FST = (\x1 -> λx2 -> x1) in FST x3 (ID x4) 
+ex6'5 = LamDef [ ("ID",exId) , ("FST",LamAbs 1 (LamAbs 2 (LamVar 1))) ] ( LamApp (LamApp (LamMacro "FST") (LamVar 3)) (LamApp (LamMacro "ID") (LamVar 4)))
 
--- --  def FST = (\x1 -> λx2 -> x1) in FST x3 ((\x1 ->x1) x4))   
--- ex6'6 = LamDef [ ("FST", LamAbs 1 (LamAbs 2 (LamVar 1)) ) ]  ( LamApp (LamApp (LamMacro "FST") (LamVar 3)) (LamApp (exId) (LamVar 4)))
+--  def FST = (\x1 -> λx2 -> x1) in FST x3 ((\x1 ->x1) x4))   
+ex6'6 = LamDef [ ("FST", LamAbs 1 (LamAbs 2 (LamVar 1)) ) ]  ( LamApp (LamApp (LamMacro "FST") (LamVar 3)) (LamApp (exId) (LamVar 4)))
 
--- -- def ID = \x1 -> x1 in def SND = (\x1 -> λx2 -> x2) in SND ((\x1 -> x1 x1 ) (\x1 -> x1 x1)) ID
--- ex6'7 = LamDef [ ("ID",exId) , ("SND",LamAbs 1 (LamAbs 2 (LamVar 2))) ]  (LamApp (LamApp (LamMacro "SND") (LamApp wExp wExp) ) (LamMacro "ID") ) 
+-- def ID = \x1 -> x1 in def SND = (\x1 -> λx2 -> x2) in SND ((\x1 -> x1 x1 ) (\x1 -> x1 x1)) ID
+ex6'7 = LamDef [ ("ID",exId) , ("SND",LamAbs 1 (LamAbs 2 (LamVar 2))) ]  (LamApp (LamApp (LamMacro "SND") (LamApp wExp wExp) ) (LamMacro "ID") ) 
+
+helper :: LamMacroExpr -> ([(String, LamExpr)], LamExpr)
+helper (LamDef ms e) = (ms, e)
