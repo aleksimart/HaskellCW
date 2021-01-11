@@ -142,21 +142,26 @@ findLetter :: WordSearchGrid -> Posn -> Char
 findLetter css (col, row) = (css!!row)!!col
 
 -- Challenge 2 --
+-- TODO clean up this mess and optimise by breaking down the check into a separate function (can keep this one and the rest that can be recursive should be called later)
 createWordSearch :: [ String ] -> Double -> IO WordSearchGrid
 createWordSearch ws density
   | (not.isValidDensity) density = error "Invalid density, it must be between 0 and 1 (excluding them)"
   | (not.checkWordsValidity) ws = error "Invalid list of words, a word cannot be empty"
   | otherwise = do let words = upperCase ws
-                   let gridN= gridlength words density
+                   let gridN = max (maxWordLength words 0) (gridlength words density)
                    let gridEmpty = genEmptyGrid gridN
                    let charSet = availableChar words 
                    gridWithWords <- insertWords words gridEmpty
-                   finalGrid <- fillGrid charSet gridWithWords
-                   if findUniqueWords finalGrid words
+                   if null gridWithWords
                       then
-                      return finalGrid
-                      else
-                      createWordSearch words density
+                        createWordSearch words density
+                      else 
+                        do finalGrid <- fillGrid charSet gridWithWords
+                           if findUniqueWords finalGrid words
+                               then
+                               return finalGrid
+                               else
+                               createWordSearch words density
 
 -- Validity Checks
 ------------------------------------------------------------
@@ -196,9 +201,17 @@ genWordOrientation word = do num <- randVal 0 7
 -- Based on the density value
 -- TODO: Make it better
 gridlength :: [String] -> Double -> Int
-gridlength words density = ceiling((characterNo words / density)/3) 
+gridlength words density = ceiling(sqrt (characterNo words / density) + 1) 
   where
-    characterNo = fromIntegral.length.concat
+    characterNo = fromIntegral . length . concat
+
+maxWordLength :: [String] -> Int -> Int
+maxWordLength [] max = max
+maxWordLength (word:words) max 
+  | max > worLen = maxWordLength words max
+  | otherwise    = maxWordLength words worLen 
+  where
+    worLen = length word
 
 -- Create a grid filled with 0's
 -- Used later on to first fill it up with hidden words
@@ -280,21 +293,26 @@ canReplaceLetter css l p = findLetter css p == '0' || findLetter css p == l
 -- In a given grid
 insertWords :: [String] -> [String] -> IO [String]
 insertWords [] css = return css
-insertWords (w:ws) css = do first <- generateInsertWord w css
-                            insertWords ws first
+insertWords (w:ws) css = do first <- generateInsertWord w css 0
+                            if null first
+                               then 
+                                  return []
+                                else
+                                  insertWords ws first
 
 -- Function that takes a string and generates a successfull position
 -- And orientation for it that results in it being inserted in a given grid
-generateInsertWord :: String -> [String] -> IO [String]
-generateInsertWord w css = do (_, orientation) <- genWordOrientation w
-                              position <- genPosn orientation (length w) (length css)
-                              let insertInGrid = updateInsert orientation position w css
-                              if isJust insertInGrid
-                                 then 
-                                   do let Just grid = insertInGrid
-                                      return grid 
-                                 else 
-                                   generateInsertWord w css
+generateInsertWord :: String -> [String] -> Int -> IO [String]
+generateInsertWord _ _ 15 = return []
+generateInsertWord w css counter = do (_, orientation) <- genWordOrientation w
+                                      position <- genPosn orientation (length w) (length css)
+                                      let insertInGrid = updateInsert orientation position w css
+                                      if isJust insertInGrid
+                                        then 
+                                          do let Just grid = insertInGrid
+                                             return grid 
+                                        else 
+                                          generateInsertWord w css (counter + 1)
 ------------------------------------------------------------
   
 -- Finish Off the Grid
@@ -324,7 +342,7 @@ fillLine ls (c:cs) = do character <- randomChar ls
 -- Removes duplicates from a given array with O(nlogn) time
 -- TODO:: Maybe change it to the other stable solution (check link, comments under the solution i used)
 availableChar :: [String] -> String
-availableChar = (head.group.sort).concat
+availableChar ws = map head . group . sort $ concat ws 
             
 -- Function that returns either the original character
 -- Or the new one, depending on whether the cell is free or not
@@ -379,39 +397,50 @@ findUniqueWords css ws  = and $ map (uniqueWord css False) tuples
                                                          
 ------------------------------------------------------------
   
--- Debug is a function that only puts in the hidden words
--- in the grid without any random characters
--- (the rest of the cells just have '0' in them) 
-debug :: [String] -> Double -> IO WordSearchGrid
-debug ws density = insertWords ws gridEmpty
-  where
-    gridN= gridlength ws density
-    gridEmpty = genEmptyGrid gridN
-
- 
 --- Convenience functions supplied for testing purposes
--- createAndSolve :: [ String ] -> Double -> IO [ (String, Maybe Placement) ]
--- createAndSolve words maxDensity =   do g <- debug words maxDensity
---                                        let soln = solveWordSearch words g
---                                        printGrid g
---                                        return soln
---
 createAndSolve :: [ String ] -> Double -> IO [ (String, Maybe Placement) ]
 createAndSolve words maxDensity =   do g <- createWordSearch words maxDensity
                                        let soln = solveWordSearch words g
                                        printGrid g
                                        return soln
-                                       
--- Changed the functions bellow to improve the prettyPrint of the grid
+
 printGrid :: WordSearchGrid -> IO ()
 printGrid [] = return ()
-printGrid (w:ws) = do printLine w
+printGrid (w:ws) = do putStrLn w
                       printGrid ws
+-- Debug is a function that only puts in the hidden words
+-- in the grid without any random characters
+-- (the rest of the cells just have '0' in them) 
+-- debug :: [String] -> Double -> IO WordSearchGrid
+-- debug ws density = insertWords ws gridEmpty
+--   where
+--     gridN= gridlength ws density
+--     gridEmpty = genEmptyGrid gridN
 
--- Function that pretty-prints one line of a grid printLine :: String -> IO () printLine [] = putChar '\n' 
-printLine (l:ls) = do putChar l
-                      putChar ' '
-                      printLine ls
+ 
+-- --- Convenience functions supplied for testing purposes
+-- createAndSolve :: [ String ] -> Double -> IO [ (String, Maybe Placement) ]
+-- createAndSolve words maxDensity =   do g <- debug words maxDensity
+--                                        let soln = solveWordSearch words g
+--                                        printGrid g
+--                                         return soln
+
+-- -- createAndSolve :: [ String ] -> Double -> IO [ (String, Maybe Placement) ]
+-- -- createAndSolve words maxDensity =   do g <- createWordSearch words maxDensity
+-- --                                        let soln = solveWordSearch words g
+-- --                                        printGrid g
+-- --                                        return soln
+                                       
+-- -- Changed the functions bellow to improve the prettyPrint of the grid
+-- printGrid :: WordSearchGrid -> IO ()
+-- printGrid [] = return ()
+-- printGrid (w:ws) = do printLine w
+--                       printGrid ws
+
+-- -- Function that pretty-prints one line of a grid printLine :: String -> IO () printLine [] = putChar '\n' 
+-- printLine (l:ls) = do putChar l
+--                       putChar ' '
+--                       printLine ls
 
 -- Challenge 3 --
 
