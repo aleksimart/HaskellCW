@@ -42,7 +42,7 @@ data Orientation = Forward | Back | Up | Down | UpForward | UpBack | DownForward
 solveWordSearch :: [ String ] -> WordSearchGrid -> [ (String,Maybe Placement) ]
 solveWordSearch ws css 
     |(not.checkGridValidity) grid  = error "Invalid Grid, it mustn't be empty or not square"
-    |(not.checkWordsValidity) words  = error "Invalid list of words, a word cannot be an empty string"
+    |(not.checkWordsValidity) words  = error "Invalid list of words, a word cannot be an empty string or contain non-alphabetic characters"
     | otherwise                   = map (placementSearch grid) tuples  
   where
     words = upperCase ws
@@ -54,11 +54,11 @@ checkGridValidity :: WordSearchGrid -> Bool
 checkGridValidity [] = False
 checkGridValidity g@(cs:_) = length g == length cs
 
-checkWordsValidity :: [ String ] -> Bool
+checkWordsValidity :: [String] -> Bool
 checkWordsValidity [] = False
-checkWordsValidity ([]:_) = False
-checkWordsValidity [_] = True
-checkWordsValidity (_:ws) = checkWordsValidity ws
+checkWordsValidity ([] : _) = False
+checkWordsValidity [w] = all isAlpha w
+checkWordsValidity (w:ws) = all isAlpha w && checkWordsValidity ws
 
 upperCase :: [String] -> [String]
 upperCase = map (map toUpper) 
@@ -146,7 +146,7 @@ findLetter css (col, row) = (css!!row)!!col
 createWordSearch :: [ String ] -> Double -> IO WordSearchGrid
 createWordSearch ws density
   | (not.isValidDensity) density = error "Invalid density, it must be between 0 and 1 (excluding them)"
-  | (not.checkWordsValidity) ws = error "Invalid list of words, a word cannot be empty"
+  | (not.checkWordsValidity) ws = error "Invalid list of words, a word cannot be empty or contain nonnumeric characters"
   | otherwise = do let words = upperCase ws
                    let gridN = max (maxWordLength words 0) (gridlength words density)
                    let gridEmpty = genEmptyGrid gridN
