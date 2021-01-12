@@ -41,8 +41,9 @@ data Orientation = Forward | Back | Up | Down | UpForward | UpBack | DownForward
 -- Should work with no words as well
 solveWordSearch :: [ String ] -> WordSearchGrid -> [ (String,Maybe Placement) ]
 solveWordSearch ws css 
-    |(not.checkGridValidity) grid  = error "Invalid Grid, it mustn't be empty or not square"
-    |(not.checkWordsValidity) words  = error "Invalid list of words, a word cannot be an empty string or contain non-alphabetic characters"
+    |(not.checkGridValidity) grid  = error "Invalid Grid, it must be square"
+    | null grid = solveEmptyGrid ws
+    |(not.checkWordsValidity) words  = error "Invalid list of words, a word cannot be an empty string or contain a null character"
     | otherwise                   = map (placementSearch grid) tuples  
   where
     words = upperCase ws
@@ -50,15 +51,18 @@ solveWordSearch ws css
     starts = map (startLetter grid 0 0) words
     tuples = zip words starts
 
+solveEmptyGrid :: [String] -> [(String, Maybe Placement)]
+solveEmptyGrid words = [(w,Nothing) | w <- words]
+
 checkGridValidity :: WordSearchGrid -> Bool
-checkGridValidity [] = False
+checkGridValidity [] = True
 checkGridValidity g@(cs:_) = length g == length cs
 
 checkWordsValidity :: [String] -> Bool
 checkWordsValidity [] = False
 checkWordsValidity ([] : _) = False
-checkWordsValidity [w] = all isAlpha w
-checkWordsValidity (w:ws) = all isAlpha w && checkWordsValidity ws
+checkWordsValidity [w] = '\0' `notElem` w
+checkWordsValidity (w:ws) = '\0' `notElem` w && checkWordsValidity ws
 
 upperCase :: [String] -> [String]
 upperCase = map (map toUpper) 
@@ -146,7 +150,7 @@ findLetter css (col, row) = (css!!row)!!col
 createWordSearch :: [ String ] -> Double -> IO WordSearchGrid
 createWordSearch ws density
   | (not.isValidDensity) density = error "Invalid density, it must be between 0 and 1 (excluding them)"
-  | (not.checkWordsValidity) ws = error "Invalid list of words, a word cannot be empty or contain nonnumeric characters"
+  | (not.checkWordsValidity) ws = error "Invalid list of words, a word cannot be empty or contain a null character"
   | otherwise = do let words = upperCase ws
                    let gridN = max (maxWordLength words 0) (gridlength words density)
                    let gridEmpty = genEmptyGrid gridN
@@ -213,10 +217,11 @@ maxWordLength (word:words) max
   where
     worLen = length word
 
--- Create a grid filled with 0's
+-- Create a grid filled with Null characters
+-- This program has to assume that null charcter will not be used
 -- Used later on to first fill it up with hidden words
 genEmptyGrid :: Int -> WordSearchGrid
-genEmptyGrid l = replicate l (concat (replicate l "0"))
+genEmptyGrid l = replicate l (concat (replicate l "\0"))
 ------------------------------------------------------------
 
 -- Position Generation
@@ -286,7 +291,7 @@ updateInsert UpForward p@(col, row) (l:ls) css
 -- Function that acts as a guard for the updateInsert
 -- Checks if the cell is free or has the same letter as the word
 canReplaceLetter :: [String] -> Char -> Posn -> Bool 
-canReplaceLetter css l p = findLetter css p == '0' || findLetter css p == l
+canReplaceLetter css l p = findLetter css p == '\0' || findLetter css p == l
 
 -- Change to foldM
 -- Function that takes an array of words and inserts them
@@ -347,7 +352,7 @@ availableChar ws = map head . group . sort $ concat ws
 -- Function that returns either the original character
 -- Or the new one, depending on whether the cell is free or not
 tryReplace :: Char -> Char -> Char
-tryReplace l c  | c == '0' = l
+tryReplace l c  | c == '\0' = l
   | otherwise = c
 
 -- Function that generates a random character
@@ -453,10 +458,10 @@ printGrid (w:ws) = do putStrLn w
 -- After it has been simplified.
 -- Finally, it formats the LamMacroExp as specified
 prettyPrint :: LamMacroExpr -> String
-prettyPrint (LamDef [] e) = formatLamExpr e
+prettyPrint (LamDef [] e) = formatLamExpr e False
 prettyPrint (LamDef m  e) 
   | illegalMacros $ reverse m       = error "A macro contains Illegal Macros. It cannot contain itself, any undefined ones or the ones which were not defined before itself"
-  | otherwise = formatMacros macros ++ formatLamExpr final
+  | otherwise = formatMacros macros ++ formatLamExpr final False
   where
     macros     = simplifyMacros m 
     expression = iterate (exploreExpr macros) e
@@ -491,19 +496,35 @@ containsMacros (LamApp e1 e2) ms = ms ++ containsMacros e1 [] ++ containsMacros 
 -- First part of the LanMacroExpr type
 formatMacros :: [(String, LamExpr)] -> String
 formatMacros []          = ""
-formatMacros ((l, e):ms) = "def " ++ l ++ " = " ++ formatLamExpr e ++ " in " ++ formatMacros ms 
+formatMacros ((l, e):ms) = "def " ++ l ++ " = " ++ formatLamExpr e False ++ " in " ++ formatMacros ms 
 
 -- Function that creates a pretty string out of the given expression
 -- Second part of the LanMacroExpr type
-formatLamExpr :: LamExpr -> String
-formatLamExpr (LamMacro v)   = v 
-formatLamExpr (LamAbs num e) = "\\" ++ formatLamExpr (LamVar num) ++ " -> " ++ formatLamExpr e
-formatLamExpr (LamApp e1 e2) 
-  |isAbstraction e1 && isApplication e2 = "(" ++ formatLamExpr e1 ++ ") " ++ " (" ++ formatLamExpr e2 ++ ")"
-  |isAbstraction e1          = "(" ++ formatLamExpr e1 ++ ") " ++ formatLamExpr e2
-  |isApplication e2          = formatLamExpr e1 ++ " (" ++ formatLamExpr e2 ++ ")"
-  |otherwise                 = formatLamExpr e1 ++ " " ++ formatLamExpr e2
-formatLamExpr (LamVar num)   = "x" ++ show num
+formatLamExpr :: LamExpr -> Bool -> String
+formatLamExpr (LamMacro v)   innerBool = v 
+formatLamExpr (LamAbs num e) innerBool
+  | checkVar num && innerBool = "(\\" ++ formatLamExpr (LamVar num) False ++ " -> " ++ formatLamExpr e False ++ ")"
+  | checkVar num = "\\" ++ formatLamExpr (LamVar num) innerBool ++ " -> " ++ formatLamExpr e innerBool
+formatLamExpr (LamApp e1 e2) innerBool 
+  |isAbstraction e1 && isApplication e2 = formatLamExpr e1 True  ++ " (" ++ formatLamExpr e2 innerBool ++ ")"
+  |isAbstraction e1          = formatLamExpr e1 True ++ " " ++ formatLamExpr e2 innerBool
+  |isApplication e2          = formatLamExpr e1  innerBool ++ " (" ++ formatLamExpr e2 innerBool ++ ")"
+  |otherwise                 = formatLamExpr e1 innerBool ++ " " ++ formatLamExpr e2 innerBool
+formatLamExpr (LamVar num) innerBool  | checkVar num = "x" ++ show num
+
+-- formatInnerLam :: LamExpr -> String 
+-- formatInnerLam (LamMacro v) = v
+-- formatInnerLam (LamAbs num e) | checkVar num = "(" ++ "\\" ++ formatLamExpr (LamVar num) ++ " -> " ++ formatLamExpr e ++ ")"
+-- formatInnerLam (LamApp e1 e2) 
+--   |isAbstraction e1 && isApplication e2 = "(" ++ formatInnerLam e1 ++ ") " ++ " (" ++ formatInnerLam e2 ++ ")"
+--   |isAbstraction e1          = formatInnerLam e1 ++ formatInnerLam e2
+--   |isApplication e2          = formatInnerLam e1 ++ " (" ++ formatInnerLam e2 ++ ")"
+--   |otherwise                 = formatInnerLam e1 ++ " " ++ formatInnerLam e2
+-- formatInnerLam (LamVar num)   | checkVar num = "x" ++ show num
+
+checkVar :: Int -> Bool
+checkVar val | val >= 0 = True
+  | otherwise = error "Error: encountered negative value for variable value"
 ------------------------------------------------------------
 
 -- Simplifying Macros and the Expression using other Macros
@@ -718,6 +739,9 @@ var = do space
          char 'x'
          LamVar . read <$> some digit
 
+-- TODO use that in code
+digits :: Parser Int 
+digits = read <$> some digit
 -- digits :: Parser String
 -- digits =    do  e <- digit 
 --                 return [e]
