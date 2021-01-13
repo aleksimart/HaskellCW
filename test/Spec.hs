@@ -6,6 +6,7 @@ import Data.Char
 import Data.Maybe
 import System.CPUTime
 import Test.QuickCheck
+import Parsing
 
 -- https://stackoverflow.com/questions/13350164/how-do-i-test-for-an-error-in-haskell
 assertException :: (Exception e, Eq e) => e -> IO a -> IO ()
@@ -61,6 +62,13 @@ main = do
     start 5
     stage "simple cps transformation rules" (runTestTT simpleTest5)
     stage "original examples given" (runTestTT casesTest5)
+
+    start 6
+    stage "original examples given" (runTestTT casesTest6)
+    stage "inner reductions step by step" (runTestTT innerReductionsTest6'6)
+    stage "outer reductions step by step" (runTestTT outerReductionsTest6'6)
+    stage "inner reductions of a cps transformed expression step by step" (runTestTT innerCpsReductionsTest6'1)
+    stage "outer reductions of a cps transformed expression step by step" (runTestTT outerCpsReductionsTest6'1)
 
 
 isUpperLetters :: String -> Bool
@@ -547,3 +555,92 @@ casesTest5 = TestList [ TestLabel "Given example 2" case5'5,
 
 -- Challenge 6
 ------------------------------------------------------------
+    
+-- Testing Given Examples
+------------------------------------------------------------
+
+exId6 =  (LamAbs 1 (LamVar 1))
+
+case6'1 = TestCase (assertEqual "Incorrect number of reductions for expression: \\x1 -> x1 x2" ans6'1 (compareInnerOuter ex6'1 10))
+ex6'1 =  LamDef [] (LamAbs 1 (LamApp (LamVar 1) (LamVar 2)))
+ans6'1 = (Just 0,Just 0,Just 6,Just 6)
+
+case6'2 = TestCase (assertEqual "Incorrect number of reductions for expression: def F = \\x1 -> x1 in F " ans6'2 (compareInnerOuter ex6'2 10))
+ex6'2 = LamDef [ ("F",exId6) ] (LamMacro "F")
+ans6'2 = (Just 1,Just 1,Just 3,Just 3)
+
+case6'3 = TestCase (assertEqual "Incorrect number of reductions for expression: (\\x1 -> x1) (\\x2 -> x2)" ans6'3 (compareInnerOuter ex6'3 10))
+ex6'3 = LamDef [] ( LamApp exId6 (LamAbs 2 (LamVar 2)))
+ans6'3 = (Just 1,Just 1,Just 8,Just 8)
+
+wExp = (LamAbs 1 (LamApp (LamVar 1) (LamVar 1)))
+case6'4 = TestCase (assertEqual "Incorrect number of reductions for expression: (\\x1 -> x1 x1) (\\x1 -> x1 x1)" ans6'4 (compareInnerOuter ex6'4 100))
+ex6'4 = LamDef [] (LamApp wExp wExp)
+ans6'4 = (Nothing,Nothing,Nothing,Nothing)
+
+case6'5 = TestCase (assertEqual "Incorrect number of reductions for expression: def ID = \\x1 -> x1 in def FST = (\\x1 -> \\x2 -> x1) in FST x3 (ID x4)" ans6'5 (compareInnerOuter ex6'5 30))
+ex6'5 = LamDef [ ("ID",exId6) , ("FST",LamAbs 1 (LamAbs 2 (LamVar 1))) ] ( LamApp (LamApp (LamMacro "FST") (LamVar 3)) (LamApp (LamMacro "ID") (LamVar 4)))
+ans6'5 = (Just 4,Just 4,Just 22,Just 22)
+--  
+case6'6 = TestCase (assertEqual "Incorrect number of reductions for expression: def FST = (\\x1 -> \\x2 -> x1) in FST x3 ((\\x1 ->x1) x4))" ans6'6 (compareInnerOuter ex6'6 30))
+ex6'6 = LamDef [ ("FST", LamAbs 1 (LamAbs 2 (LamVar 1)) ) ]  ( LamApp (LamApp (LamMacro "FST") (LamVar 3)) (LamApp (exId6) (LamVar 4)))
+ans6'6 = (Just 4,Just 3,Just 21,Just 21)
+
+-- 
+case6'7 = TestCase (assertEqual "Incorrect number of reductions for expression: def ID = \\x1 -> x1 in def SND = (\\x1 -> \\x2 -> x2) in SND ((\\x1 -> x1 x1 ) (\\x1 -> x1 x1)) ID" ans6'7 (compareInnerOuter ex6'7 1000))
+ex6'7 = LamDef [ ("ID",exId6) , ("SND",LamAbs 1 (LamAbs 2 (LamVar 2))) ]  (LamApp (LamApp (LamMacro "SND") (LamApp wExp wExp) ) (LamMacro "ID") ) 
+ans6'7 = (Nothing,Just 4,Nothing,Nothing)
+
+casesTest6 = TestList [ TestLabel "Given example 1" case6'1,
+                        TestLabel "Given example 2" case6'2,
+                        TestLabel "Given example 3" case6'3,
+                        TestLabel "Given example 4" case6'4,
+                        TestLabel "Given example 5" case6'5,
+                        TestLabel "Given example 6" case6'6,
+                        TestLabel "Given example 7" case6'7 ]
+
+-- Testing Step by step inner and outer reductions
+------------------------------------------------------------
+
+innerReductionsTest6'6 = TestList (formatRedList innerReductions6'6 reductions 1) 
+    where
+        Just reductions = allReductions innerRedn1 ex6'5
+
+outerReductionsTest6'6 = TestList (formatRedList outerReductions6'6 reductions 1) 
+    where
+        Just reductions = allReductions outerRedn1 ex6'5
+
+innerCpsReductionsTest6'1 = TestList (formatRedList innerCpsReductions6'1 reductions 1) 
+    where
+        Just reductions = allReductions innerRedn1 (toCps 3 ex6'1)
+
+outerCpsReductionsTest6'1 = TestList (formatRedList outerCpsReductions6'1 reductions 1) 
+    where
+        Just reductions = allReductions outerRedn1 (toCps 3 ex6'1)
+
+formatRedList :: [LamMacroExpr] -> [LamMacroExpr] -> Int -> [Test]
+
+formatRedList [] [] _ = []
+formatRedList [] d _  = [TestLabel "Wrong Number of reductions present" (TestCase(assertFailure "More reductions took place than there should be"))]
+formatRedList d [] _  = [TestLabel "Wrong Number of reductions present" (TestCase(assertFailure "Less reductions took place than there should be"))]
+formatRedList (corRed:corReds) (red:reds) number = test : (formatRedList corReds reds (number + 1))
+    where
+        case1 = TestCase (assertEqual ("Failed reduction at step " ++ show number) corRed red)
+        test = TestLabel ("Reduction number " ++ show number) case1
+
+innerReductions6'6 = [LamDef [("ID",LamAbs 1 (LamVar 1))] (LamApp (LamApp (LamAbs 1 (LamAbs 2 (LamVar 1))) (LamVar 3)) (LamApp (LamMacro "ID") (LamVar 4))),LamDef [("ID",LamAbs 1 (LamVar 1))] (LamApp (LamAbs 2 (LamVar 3)) (LamApp (LamMacro "ID") (LamVar 4))),LamDef [("ID",LamAbs 1 (LamVar 1))] (LamVar 3),LamDef [] (LamVar 3)]
+outerReductions6'6 = [LamDef [("FST",LamAbs 1 (LamAbs 2 (LamVar 1)))] (LamApp (LamApp (LamMacro "FST") (LamVar 3)) (LamApp (LamAbs 1 (LamVar 1)) (LamVar 4))),LamDef [] (LamApp (LamApp (LamAbs 1 (LamAbs 2 (LamVar 1))) (LamVar 3)) (LamApp (LamAbs 1 (LamVar 1)) (LamVar 4))),LamDef [] (LamApp (LamAbs 2 (LamVar 3)) (LamApp (LamAbs 1 (LamVar 1)) (LamVar 4))),LamDef [] (LamVar 3)]
+
+innerCpsReductions6'1 = [LamDef [] (LamApp (LamAbs 3 (LamApp (LamVar 3) (LamAbs 1 (LamAbs 4 (LamApp (LamAbs 7 (LamApp (LamVar 7) (LamVar 1))) (LamAbs 5 (LamApp (LamAbs 6 (LamApp (LamApp (LamVar 5) (LamVar 6)) (LamVar 4))) (LamVar 2)))))))) (LamAbs 3 (LamVar 3))),LamDef [] (LamApp (LamAbs 3 (LamApp (LamVar 3) (LamAbs 1 (LamAbs 4 (LamApp (LamAbs 7 (LamApp (LamVar 7) (LamVar 1))) (LamAbs 5 (LamApp (LamApp (LamVar 5) (LamVar 2)) (LamVar 4)))))))) (LamAbs 3 (LamVar 3))),LamDef [] (LamApp (LamAbs 3 (LamApp (LamVar 3) (LamAbs 1 (LamAbs 4 (LamApp (LamAbs 5 (LamApp (LamApp (LamVar 5) (LamVar 2)) (LamVar 4))) (LamVar 1)))))) (LamAbs 3 (LamVar 3))),LamDef [] (LamApp (LamAbs 3 (LamApp (LamVar 3) (LamAbs 1 (LamAbs 4 (LamApp (LamApp (LamVar 1) (LamVar 2)) (LamVar 4)))))) (LamAbs 3 (LamVar 3))),LamDef [] (LamApp (LamAbs 3 (LamVar 3)) (LamAbs 1 (LamAbs 4 (LamApp (LamApp (LamVar 1) (LamVar 2)) (LamVar 4))))),LamDef [] (LamAbs 1 (LamAbs 4 (LamApp (LamApp (LamVar 1) (LamVar 2)) (LamVar 4))))]
+outerCpsReductions6'1 = [LamDef [] (LamApp (LamAbs 3 (LamVar 3)) (LamAbs 1 (LamAbs 4 (LamApp (LamAbs 7 (LamApp (LamVar 7) (LamVar 1))) (LamAbs 5 (LamApp (LamAbs 8 (LamApp (LamVar 8) (LamVar 2))) (LamAbs 6 (LamApp (LamApp (LamVar 5) (LamVar 6)) (LamVar 4))))))))),LamDef [] (LamAbs 1 (LamAbs 4 (LamApp (LamAbs 7 (LamApp (LamVar 7) (LamVar 1))) (LamAbs 5 (LamApp (LamAbs 8 (LamApp (LamVar 8) (LamVar 2))) (LamAbs 6 (LamApp (LamApp (LamVar 5) (LamVar 6)) (LamVar 4)))))))),LamDef [] (LamAbs 1 (LamAbs 4 (LamApp (LamAbs 5 (LamApp (LamAbs 8 (LamApp (LamVar 8) (LamVar 2))) (LamAbs 6 (LamApp (LamApp (LamVar 5) (LamVar 6)) (LamVar 4))))) (LamVar 1)))),LamDef [] (LamAbs 1 (LamAbs 4 (LamApp (LamAbs 8 (LamApp (LamVar 8) (LamVar 2))) (LamAbs 6 (LamApp (LamApp (LamVar 1) (LamVar 6)) (LamVar 4)))))),LamDef [] (LamAbs 1 (LamAbs 4 (LamApp (LamAbs 6 (LamApp (LamApp (LamVar 1) (LamVar 6)) (LamVar 4))) (LamVar 2)))),LamDef [] (LamAbs 1 (LamAbs 4 (LamApp (LamApp (LamVar 1) (LamVar 2)) (LamVar 4))))]
+
+allReductions :: (LamMacroExpr -> Maybe LamMacroExpr) -> LamMacroExpr -> Maybe [LamMacroExpr]
+allReductions strat expr = do reduced <- strat expr
+                              rest <- allReductions strat reduced
+                              return (reduced:rest)  
+                           <|> Just []
+
+toCps :: Int -> LamMacroExpr -> LamMacroExpr
+toCps nextFree expr = LamDef macros (LamApp transformed (LamAbs nextFree (LamVar nextFree)))
+  where
+    LamDef macros transformed = cpsTransform expr
