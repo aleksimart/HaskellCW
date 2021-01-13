@@ -22,7 +22,7 @@ import System.IO
 import System.Random
 import Data.Maybe 
 
-
+-- TODO remove the checks in challenge 3 for incorecctness
 -- types for Part I
 type WordSearchGrid = [[ Char ]]
 type Placement = (Posn,Orientation)
@@ -457,6 +457,7 @@ printGrid (w:ws) = do putStrLn w
 -- Done more than once since a bigger macro might not be recognised at first
 -- After it has been simplified.
 -- Finally, it formats the LamMacroExp as specified
+-- TODO remove the macros checks 
 prettyPrint :: LamMacroExpr -> String
 prettyPrint (LamDef [] e) = formatLamExpr e False
 prettyPrint (LamDef m  e) 
@@ -558,6 +559,8 @@ exploreExpr ms (LamApp e1 e2) = LamApp (exploreExpr ms e1) (exploreExpr ms e2)
 -- If there isn't such
 check :: [(String, LamExpr)] -> LamExpr -> Maybe (String, LamExpr)
 check [] _ = Nothing
+-- If an expression is already a full on macro then don't further substitute it, otherwise it will result in the final macro being substituted by the inner one
+check _ (LamMacro _) = Nothing 
 check (m@(_, exp):ms) e 
   | exp == e  = Just m
   | otherwise = check ms e
@@ -593,12 +596,6 @@ ex3'1 = LamDef [] (LamApp (LamAbs 1 (LamVar 1)) (LamAbs 1 (LamVar 1)))
 ex3'2 = LamDef [] (LamAbs 1 (LamApp (LamVar 1) (LamAbs 1 (LamVar 1))))
 ex3'3 = LamDef [ ("F", LamAbs 1 (LamVar 1) ) ] (LamAbs 2 (LamApp (LamVar 2) (LamMacro "F")))
 ex3'4 = LamDef [ ("F", LamAbs 1 (LamVar 1) ) ] (LamAbs 2 (LamApp (LamAbs 1 (LamVar 1)) (LamVar 2))) 
-ex3'5 = LamDef [("F", LamAbs 1 (LamVar 1)), ("G", LamApp(LamAbs 1 (LamVar 1)) (LamVar 2))] (LamAbs 1 (LamVar 1))
-ex3'6 = LamDef [("F", LamAbs 1 (LamVar 1)), ("G", LamAbs 2 (LamAbs 1 (LamVar 1)))] (LamApp(LamAbs 2 (LamAbs 1 (LamVar 1))) (LamVar 2))
-ex3'7 = LamDef [] (LamAbs 3 (LamApp (LamAbs 6 (LamApp (LamVar 6) (LamVar 1))) (LamAbs 4 (LamApp (LamAbs 7 (LamApp (LamVar 7)  (LamVar 2))) (LamAbs 5 (LamApp (LamApp (LamVar 4) (LamVar 5)) (LamVar 3)))))))
-ex3'8 = LamDef [("F", LamAbs 2 (LamAbs 1 (LamVar 1))),("G", LamAbs 1 (LamVar 1))] (LamApp (LamVar 3) (LamApp (LamVar 1) (LamVar 2)))
-ex3'9 = LamDef []  (LamApp(LamAbs 1 (LamAbs 2 (LamVar 1))) (LamVar 2))
-ex3'10 = LamDef [] (LamAbs 2(LamAbs 1(LamAbs 0 (LamVar 0))))
 
 -- Challenge 4 --
 
@@ -672,7 +669,12 @@ free (LamApp e1 e2) x = free e1 x || free e2 x
   
 -- Parser that first parses all the macros definitions and then the actual expression
 macrosExpr :: Parser LamMacroExpr 
-macrosExpr = LamDef <$> many macrosMap <*> expr
+macrosExpr = LamDef <$> many macrosMap <*> cleanSpace
+
+-- TODO this is basically a function to remove the trailing space in the end
+cleanSpace = do e <- expr
+                space
+                return e
 
 -- Parser that parses all the macros definitions
 macrosMap :: Parser (String, LamExpr)
@@ -842,15 +844,10 @@ ex5'4 = (LamDef [ ("F", exId) ] (LamApp (LamMacro "F") (LamMacro "F")))
 -- Challenge 6
 
 innerRedn1 :: LamMacroExpr -> Maybe LamMacroExpr
-innerRedn1 (LamDef _ (LamVar _)) = Nothing
-innerRedn1 (LamDef ms (LamMacro x)) = Just (LamDef ms (macroLookup ms x))
--- innerRedn1 (LamDef ms  (LamAbs x e)) | isJust inner = 
---   where
---     inner = innerRedn1 e
-
+innerRedn1 expr = innerRedn (inc $ getValue expr) expr
 
 outerRedn1 :: LamMacroExpr -> Maybe LamMacroExpr
-outerRedn1 _ = Nothing
+outerRedn1 expr = outerRedn (inc $ getValue expr) expr
 
 compareInnerOuter :: LamMacroExpr -> Int -> (Maybe Int,Maybe Int,Maybe Int,Maybe Int)
 compareInnerOuter expr val = (reductions innerRedn expr val, reductions outerRedn expr val, reductions innerRedn (toCps (getValue expr) expr) val, reductions outerRedn (toCps (getValue expr) expr) val ) 
@@ -922,8 +919,7 @@ outerRedn max (LamDef macros expr) = if null macros
                                         else
                                         Just (LamDef (tail macros) (subMacro (head macros) expr))
 
-
-toCps ::Int -> LamMacroExpr -> LamMacroExpr
+toCps :: Int -> LamMacroExpr -> LamMacroExpr
 toCps nextFree expr = LamDef macros (LamApp transformed (LamAbs nextFree (LamVar nextFree)))
   where
     LamDef macros transformed = cpsTransform expr
