@@ -735,6 +735,7 @@ ex4'6 = "def F = x1 in F"
 
 -- Challenge 5
 
+-- Transforms given expression in CPS form
 cpsTransform :: LamMacroExpr -> LamMacroExpr
 cpsTransform me@(LamDef ms e) = LamDef macros (snd expr)
   where 
@@ -742,6 +743,9 @@ cpsTransform me@(LamDef ms e) = LamDef macros (snd expr)
     macros = transitionMacros (fst expr, ms)
     expr = transitionExpr (inc max, e)
 
+-- Getting the current biggest available variable's name value
+------------------------------------------------------------
+-- Gets the current maximum variable name value from both macros and the expression
 getValue :: LamMacroExpr -> Int
 getValue (LamDef m e) | macro > expr = macro
   | otherwise = expr
@@ -750,6 +754,7 @@ getValue (LamDef m e) | macro > expr = macro
     expr = getMax $ getVariables e
 
 
+-- Gets the maximum variable name value from the expressions inside macros definitions
 maxMacroVal :: Int -> [(String, LamExpr)] -> Int
 maxMacroVal v [] = v
 maxMacroVal v ((_, expr): ms)  
@@ -758,26 +763,28 @@ maxMacroVal v ((_, expr): ms)
   where
     local = getMax $ getVariables expr
 
-getMax :: [Int] -> Int
-getMax = foldr (\x y -> if x >= y then x else y) 0
 
+-- Converting macros and expression to cps form
+------------------------------------------------------------
+  
+-- Converting macros expressions in cps form
 transitionMacros :: (Int, [(String, LamExpr)]) -> [(String, LamExpr)]
 transitionMacros (_, []) = []
 transitionMacros (val, (n, e):ms)= (n, snd expression) : transitionMacros (fst expression, ms)
   where
     expression = transitionExpr (val, e)
 
--- HMMM Maybe also (Int, LamExpr)
+-- Convering expression to cps form
+-- Integer is kept for showing the next available value to assign to a Variable
 transitionExpr :: (Int, LamExpr) -> (Int, LamExpr)
-transitionExpr (val, v@(LamVar _)) = (val+1, LamAbs val (LamApp (LamVar val) v))
+transitionExpr (val, v@(LamVar _)) = (inc val, LamAbs val (LamApp (LamVar val) v))
 transitionExpr (val, m@(LamMacro _))= (val, m)
 transitionExpr (val, LamAbs x e) = (available, csp)
   where
-    expr = transitionExpr (val+1, e) 
+    expr = transitionExpr (inc val, e) 
     available = fst expr
     evaluated = snd expr
     csp = LamAbs val (LamApp (LamVar val) (LamAbs x evaluated)) 
-
 transitionExpr (k, LamApp e1 e2) = (fst expr2 ,csp)
   where
     expr1 = transitionExpr (inc e, e1)
@@ -786,6 +793,12 @@ transitionExpr (k, LamApp e1 e2) = (fst expr2 ,csp)
     e = inc f
     csp = LamAbs k (LamApp (snd expr1) (LamAbs f (LamApp (snd expr2) (LamAbs e (LamApp (LamApp (LamVar f) (LamVar e)) (LamVar k))))))
    
+-- Additional Helper Functions
+------------------------------------------------------------
+-- Max value from a list of ints
+getMax :: [Int] -> Int
+getMax = foldr (\x y -> if x >= y then x else y) 0
+
 inc :: Int -> Int
 inc a = a+1
 
@@ -819,45 +832,6 @@ reductions strat e max = case strat (inc $ getValue e) e of
                            Just reduced -> (1+) <$> reductions strat reduced (max - 1)
                            Nothing      -> Just 0
 
-
-            
-
--- reductions strat e 0 
---   | isJust reduced = Nothing
---   | otherwise = Just 0
---   where
---     nextFree = inc $ getValue e
---     reduced = strat nextFree e
--- reductions strat e max 
---   | isJust reduced = fmap (1+) (reductions strat a (max - 1))
---   | otherwise = Just 0
---   where
---     nextFree = inc $ getValue e
---     reduced = strat nextFree e
---     Just a = reduced
-
-
--- alt :: Maybe (Int -> LamMacroExpr -> Maybe LamMacroExpr) -> Maybe a -> Maybe a
--- alt a b = \inp -> case a inp of
---                     Nothing -> b inp
---                     Just c -> Just c
-
--- reductions strat e = [p | p <- zip evals (tail evals)]
---   where
---     evals = iterate $ strat nextFree 
---     nextFree = inc $ getValue e
-
-
-
--- Todo, maybe return max
--- innerRedn :: Int -> LamMacroExpr -> Maybe LamMacroExpr
--- innerRedn max (LamDef macros expr) 
---   | expr == innerExpr && null macros       = Nothing 
---   | expr == innerExpr && (not.null) macros = Just (subMacros (reverse macros) expr)
---   | otherwise                              = Just (LamDef macros innerExpr)
---   where
---     innerExpr = innerExprRedn max expr
-
 innerRedn :: Int -> LamMacroExpr -> Maybe LamMacroExpr
 innerRedn max (LamDef macros expr) = do inner <- innerExprRedn max expr
                                         return (LamDef macros inner)
@@ -879,11 +853,6 @@ toCps :: Int -> LamMacroExpr -> LamMacroExpr
 toCps nextFree expr = LamDef macros (LamApp transformed (LamAbs nextFree (LamVar nextFree)))
   where
     LamDef macros transformed = cpsTransform expr
--- | expr == innerExpr && null macros       = Nothing 
--- | expr == innerExpr && (not.null) macros = Just (subMacros (reverse macros) expr)
--- | otherwise                              = Just (LamDef macros innerExpr)
--- where
---   innerExpr = innerExprRedn max expr
 
 -- Actually don't need that because even if the macro is empty, I still count it as reduction
 subMacros :: [(String, LamExpr)] -> LamExpr -> LamMacroExpr
@@ -902,33 +871,6 @@ subMacro (name, mexpr) expr@(LamMacro x)
 subMacro macro (LamAbs val expr)         = LamAbs val (subMacro macro expr)
 subMacro macro (LamApp e1 e2)            = LamApp (subMacro macro e1) (subMacro macro e2)
 
--- innerRedn _ ms (LamMacro x) = Lam
--- innerRedn _ ms e@(LamVar x) = LamDef ms e
--- innerRedn _ ms e@(LamAbs _ _) =  LamDef ms e
--- innerRedn max ms (LamApp (LamAbs x e1) e@(LamAbs y e2)) = LamDef ms (snd $ subst (inc max) e1 x e)
--- innerRedn max ms (LamApp (LamAbs x e1) e@(LamVar y)) = LamDef ms (snd $ subst (inc max) e1 x e)
--- innerRedn max ms (LamApp e@(LamAbs x e1) e2) = LamDef macros (LamApp e expr)
---   where
---     LamDef macros expr = eval1cbv max ms e2
--- eval1cbv max ms (LamApp e1 e2) = LamDef macros (LamApp expr e2)
---   where
---     LamDef macros expr = eval1cbv max ms e1
-
--- innerExprRedn :: Int -> LamExpr -> LamExpr
--- innerExprRedn _ expr@(LamMacro _)      = expr
--- innerExprRedn _ expr@(LamVar _)        = expr
--- innerExprRedn max (LamAbs val expr)    = LamAbs val (innerExprRedn max expr)
--- innerExprRedn max (LamApp (LamAbs val expr1) expr2) 
---   | expr1 == leftInner                 = snd $ subst max expr1 val expr2
---   | otherwise                          = LamApp leftInner expr2
---   where
---     leftInner = innerExprRedn max expr1
--- innerExprRedn max (LamApp expr1 expr2) 
---   | expr1 == leftInner                 = LamApp expr1 (innerExprRedn max expr2) 
---   | otherwise                          = LamApp leftInner expr2
---   where
---     leftInner = innerExprRedn max expr1
-
 innerExprRedn :: Int -> LamExpr -> Maybe LamExpr
 innerExprRedn _ expr@(LamMacro _)      = Nothing
 innerExprRedn _ expr@(LamVar _)        = Nothing
@@ -939,9 +881,7 @@ innerExprRedn max (LamApp lam@(LamAbs val expr1) expr2) = do inner <- innerExprR
                                                       <|> do inner <- innerExprRedn max expr2
                                                              return (LamApp lam inner)
                                                       <|>return (snd $ subst max expr1 val expr2)
--- innerExprRedn max (LamApp expr2@(LamVar _) (LamAbs val expr1)) = do inner <- innerExprRedn max expr1
---                                                                     return (LamApp expr2 (LamAbs val inner))
---                                                                  <|>return (snd $ subst max expr1 val expr2)
+
 innerExprRedn max (LamApp expr1 expr2) = do inner <- innerExprRedn max expr1
                                             return (LamApp inner expr2)
                                          <|>do inner <- innerExprRedn max expr2
@@ -975,10 +915,6 @@ subst x' (LamApp e1 e2) y e                     = (fst expr2Tuple, LamApp (snd e
     expr1Tuple = subst x' e1 y e
     expr2Tuple = subst (fst expr1Tuple) e2 y e
 
--- substMacro :: [(String, LamExpr)] -> LamExpr -> LamExpr
--- substMacro ms (LamMacro m) = macroLookup m
-
--- subst ms (LamMacro x) _ _  = macroLookup ms x
 macroLookup :: [(String, LamExpr)] -> String -> LamExpr
 macroLookup ms name = getExpr $ dropWhile (\(x,_) -> x /= name)  ms
   where
