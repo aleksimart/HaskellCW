@@ -29,6 +29,10 @@ type Placement = (Posn,Orientation)
 type Posn = (Int,Int)
 data Orientation = Forward | Back | Up | Down | UpForward | UpBack | DownForward | DownBack deriving (Eq,Ord,Show,Read)
 
+-- types for Parts II and III
+data LamMacroExpr = LamDef [ (String,LamExpr) ] LamExpr deriving (Eq,Show,Read)
+data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
+               LamAbs Int LamExpr  | LamVar Int deriving (Eq,Show,Read)
 -- END OF CODE YOU MUST NOT MODIFY
 
 -- ADD YOUR OWN CODE HERE
@@ -437,31 +441,18 @@ printGrid (w:ws) = do putStrLn w
 
 -- Challenge 3 --
 
--- Function to pretty print the given LamMacroExpr
--- First it simplifies the macros
--- Happens when an inner macro has a sub-expression which is an outer macro
--- Then subsitutes the macros in the expression multiple times
--- Until there is no change in expression.
--- Done more than once since a bigger macro might not be recognised at first
--- After it has been simplified.
--- Finally, it formats the LamMacroExp as specified
--- TODO remove the macros checks 
 prettyPrint :: LamMacroExpr -> String
 prettyPrint (LamDef [] e) = formatLamExpr e False
-prettyPrint (LamDef m  e) 
-  | illegalMacros $ reverse m       = error "A macro contains Illegal Macros. It cannot contain itself, any undefined ones or the ones which were not defined before itself"
-  | otherwise = formatMacros macros ++ formatLamExpr final False
+prettyPrint (LamDef m  e) = formatMacros macros ++ formatLamExpr final False
   where
     macros     = simplifyMacros m 
     expression = iterate (exploreExpr macros) e
-    -- Lines taken from Lecture "Implementing Evaluation"
     list       = zip expression (tail expression)
     final      = (fst . head . dropWhile(uncurry(/=))) list
 
--- TODO : Good convention is to first do something in the wrong case (when talking about guards) and then otherwise the "good one" (The one where we succeed)
--- Ask dom about it, it might not work with haskell
--- Error Check
+-- Error Check (Redundant, since was specified it is actually not required for pretty Printing)
 ------------------------------------------------------------
+-- Macro Defines itself
 illegalMacros :: [(String, LamExpr)] -> Bool
 illegalMacros []                         = False
 illegalMacros ((_, e) : ms) 
@@ -472,11 +463,17 @@ illegalMacros ((_, e) : ms)
      containedMacros = containsMacros e []  
      illegal = filter (`notElem` allowedMacros) containedMacros
 
+-- All the macros in the expression are defined
 containsMacros :: LamExpr -> [String] -> [String]
 containsMacros (LamVar _)     ms = ms 
 containsMacros (LamMacro m)   ms = m:ms
 containsMacros (LamAbs _ e)   ms = containsMacros e ms
 containsMacros (LamApp e1 e2) ms = ms ++ containsMacros e1 [] ++ containsMacros e2 []
+
+-- Variables only contain positive values
+checkVar :: Int -> Bool
+checkVar val | val >= 0 = True
+  | otherwise = error "Error: encountered negative value for variable value"
 ------------------------------------------------------------
   
 -- Formatting Macros and the Expression to a specified format
@@ -490,30 +487,17 @@ formatMacros ((l, e):ms) = "def " ++ l ++ " = " ++ formatLamExpr e False ++ " in
 -- Function that creates a pretty string out of the given expression
 -- Second part of the LanMacroExpr type
 formatLamExpr :: LamExpr -> Bool -> String
-formatLamExpr (LamMacro v)   innerBool = v 
-formatLamExpr (LamAbs num e) innerBool
-  | checkVar num && innerBool = "(\\" ++ formatLamExpr (LamVar num) False ++ " -> " ++ formatLamExpr e False ++ ")"
-  | checkVar num = "\\" ++ formatLamExpr (LamVar num) innerBool ++ " -> " ++ formatLamExpr e innerBool
-formatLamExpr (LamApp e1 e2) innerBool 
-  |isAbstraction e1 && isApplication e2 = formatLamExpr e1 True  ++ " (" ++ formatLamExpr e2 innerBool ++ ")"
-  |isAbstraction e1          = formatLamExpr e1 True ++ " " ++ formatLamExpr e2 innerBool
-  |isApplication e2          = formatLamExpr e1  innerBool ++ " (" ++ formatLamExpr e2 innerBool ++ ")"
-  |otherwise                 = formatLamExpr e1 innerBool ++ " " ++ formatLamExpr e2 innerBool
-formatLamExpr (LamVar num) innerBool  | checkVar num = "x" ++ show num
+formatLamExpr (LamMacro v)   _ = v 
+formatLamExpr (LamAbs num e) innerLam
+  | innerLam = "(\\" ++ formatLamExpr (LamVar num) False ++ " -> " ++ formatLamExpr e False ++ ")"
+  | otherwise = "\\" ++ formatLamExpr (LamVar num) innerLam ++ " -> " ++ formatLamExpr e innerLam
+formatLamExpr (LamApp e1 e2) innerLam
+  |isAbstraction e1 && isApplication e2 = formatLamExpr e1 True  ++ " (" ++ formatLamExpr e2 innerLam ++ ")"
+  |isAbstraction e1          = formatLamExpr e1 True ++ " " ++ formatLamExpr e2 innerLam
+  |isApplication e2          = formatLamExpr e1  innerLam ++ " (" ++ formatLamExpr e2 innerLam ++ ")"
+  |otherwise                 = formatLamExpr e1 innerLam ++ " " ++ formatLamExpr e2 innerLam
+formatLamExpr (LamVar num)  _ = "x" ++ show num
 
--- formatInnerLam :: LamExpr -> String 
--- formatInnerLam (LamMacro v) = v
--- formatInnerLam (LamAbs num e) | checkVar num = "(" ++ "\\" ++ formatLamExpr (LamVar num) ++ " -> " ++ formatLamExpr e ++ ")"
--- formatInnerLam (LamApp e1 e2) 
---   |isAbstraction e1 && isApplication e2 = "(" ++ formatInnerLam e1 ++ ") " ++ " (" ++ formatInnerLam e2 ++ ")"
---   |isAbstraction e1          = formatInnerLam e1 ++ formatInnerLam e2
---   |isApplication e2          = formatInnerLam e1 ++ " (" ++ formatInnerLam e2 ++ ")"
---   |otherwise                 = formatInnerLam e1 ++ " " ++ formatInnerLam e2
--- formatInnerLam (LamVar num)   | checkVar num = "x" ++ show num
-
-checkVar :: Int -> Bool
-checkVar val | val >= 0 = True
-  | otherwise = error "Error: encountered negative value for variable value"
 ------------------------------------------------------------
 
 -- Simplifying Macros and the Expression using other Macros
@@ -524,23 +508,23 @@ checkVar val | val >= 0 = True
 -- This is for the ease of recursion (inner one can be expressed as any of the outer ones) 
 exploreMacros :: [(String, LamExpr)] -> [(String, LamExpr)]
 exploreMacros [] = []
-exploreMacros (m@(name, e):ms) 
-  | e /=new   = (name, new) : exploreMacros ms 
-  | otherwise = m : exploreMacros ms
+exploreMacros (macro@(name, e):macros) 
+  | e /=new   = (name, new) : exploreMacros macros 
+  | otherwise = macro : exploreMacros macros
   where
-    new = exploreExpr ms e
+    new = exploreExpr macros e
 
 -- Function that searches the expression for any sub-expressions
 -- That are defined as given macros
 exploreExpr :: [(String, LamExpr)] -> LamExpr -> LamExpr
-exploreExpr ms e | isJust m   = LamMacro name 
+exploreExpr macros expr | isJust macro = LamMacro name 
   where
-    m = check ms e
-    Just name = fmap fst m
+    macro = check macros expr
+    Just name = fmap fst macro
 exploreExpr _ (LamMacro v)    = LamMacro v
 exploreExpr _ (LamVar num)    = LamVar num
-exploreExpr ms (LamAbs num e) = LamAbs num (exploreExpr ms e) 
-exploreExpr ms (LamApp e1 e2) = LamApp (exploreExpr ms e1) (exploreExpr ms e2)
+exploreExpr macros (LamAbs num expr) = LamAbs num (exploreExpr macros expr) 
+exploreExpr macros (LamApp expr1 expr2) = LamApp (exploreExpr macros expr1) (exploreExpr macros expr2)
 
 -- Function that checks particular expression against available 
 -- Macros and returns a macro it matches to or Nothing 
@@ -549,14 +533,14 @@ check :: [(String, LamExpr)] -> LamExpr -> Maybe (String, LamExpr)
 check [] _ = Nothing
 -- If an expression is already a full on macro then don't further substitute it, otherwise it will result in the final macro being substituted by the inner one
 check _ (LamMacro _) = Nothing 
-check (m@(_, exp):ms) e 
-  | exp == e  = Just m
-  | otherwise = check ms e
+check (macro@(_, exp):macros) e
+  | exp == e  = Just macro
+  | otherwise = check macros e
 ------------------------------------------------------------
 
 -- Additional Helper Functions
 ------------------------------------------------------------
--- Function that checks if an expression is an Abstraction
+-- Function that checks if a rightmost expression is an Abstraction 
 -- Used for bracketing purposes
 isAbstraction :: LamExpr -> Bool
 isAbstraction (LamAbs _ _) = True
@@ -575,9 +559,6 @@ isApplication _            = False
 simplifyMacros :: [(String, LamExpr)] -> [(String, LamExpr)]
 simplifyMacros = reverse.exploreMacros.reverse
 ------------------------------------------------------------
-
--- TODO: INTERESTING THING TO POINT OUT
--- If the guards for one part fail, it will continue pattern matching for the others
 
 -- examples in the instructions
 ex3'1 = LamDef [] (LamApp (LamAbs 1 (LamVar 1)) (LamAbs 1 (LamVar 1)))
@@ -625,13 +606,11 @@ filterMacros ms
     names = map fst ms 
     unique = nub names
     free = any (checkFreeVariables.snd) ms
--- free = or $ map (checkFreeVariables.snd) ms 
 
 -- Check if all the variables in the given expression are closed
 checkFreeVariables :: LamExpr -> Bool                         
 checkFreeVariables e = let vars = getVariables e in
                            any (free e) vars
--- or $ map (free e)  vars
 
 -- Gets all the variables out of an expression
 getVariables :: LamExpr -> [Int]
@@ -644,7 +623,6 @@ getVariables (LamApp e1 e2) = getVariables e1 ++ getVariables e2
 -- Checks if a given variable is free in a given expression
 free ::  LamExpr -> Int -> Bool
 free (LamVar y) x= x == y
--- Cheeky
 free (LamMacro _) _ = False
 free (LamAbs y e) x
   | x == y = False
@@ -657,12 +635,14 @@ free (LamApp e1 e2) x = free e1 x || free e2 x
   
 -- Parser that first parses all the macros definitions and then the actual expression
 macrosExpr :: Parser LamMacroExpr 
-macrosExpr = LamDef <$> many macrosMap <*> cleanSpace
+macrosExpr = LamDef <$> many macrosMap <*> exprSpace
 
--- TODO this is basically a function to remove the trailing space in the end
-cleanSpace = do e <- expr
-                space
-                return e
+-- Removes the trailing space at the end of parsing
+-- Otherwise Nothing will be return even though everything
+-- Else is parsed
+exprSpace = do e <- expr
+               space
+               return e
 
 -- Parser that parses all the macros definitions
 macrosMap :: Parser (String, LamExpr)
@@ -707,16 +687,15 @@ fact = do token(char '(')
 -- Only returns the function, because parsing it requires
 -- Left associativity rules (using function chainl1)
 app  :: Parser (LamExpr -> LamExpr -> LamExpr)
--- TODO: Added space
 app  = do char ' '
           return LamApp
 
 -- Parser for abs int Expr in given grammar  
 abst :: Parser LamExpr
 abst = do string "\\x"
-          val <- some digit 
+          val <- digits
           token (string "->")
-          LamAbs (read val) <$> expr
+          LamAbs val <$> expr
 
 -- Parser for MacroName in given grammar
 macro :: Parser LamExpr
@@ -727,17 +706,11 @@ macro = do space
 var :: Parser LamExpr
 var = do space
          char 'x'
-         LamVar . read <$> some digit
+         LamVar <$> digits
 
--- TODO use that in code
+-- Parser for multi-digit number
 digits :: Parser Int 
 digits = read <$> some digit
--- digits :: Parser String
--- digits =    do  e <- digit 
---                 return [e]
---         <|> do  e <- digit 
---                 t <- digits
---                 return (e:t)
 
 -- Function from the paper by Graham Hutton and Erik Meijer
 -- Parses repeated applications of a parser p separated by applications
@@ -761,11 +734,6 @@ ex4'5 = "def F = \\x1 -> x1 in def F = \\x2 -> x2 x1 in x1"
 ex4'6 = "def F = x1 in F"
 
 -- Challenge 5
-
--- types for Parts II and III
-data LamMacroExpr = LamDef [ (String,LamExpr) ] LamExpr deriving (Eq,Show,Read)
-data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
-               LamAbs Int LamExpr  | LamVar Int deriving (Eq,Show,Read)
 
 cpsTransform :: LamMacroExpr -> LamMacroExpr
 cpsTransform me@(LamDef ms e) = LamDef macros (snd expr)
