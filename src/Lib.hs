@@ -150,27 +150,36 @@ upperCase = map (map toUpper)
 
 
 -- Challenge 2 --
--- TODO clean up this mess and optimise by breaking down the check into a separate function (can keep this one and the rest that can be recursive should be called later)
-createWordSearch :: [ String ] -> Double -> IO WordSearchGrid
-createWordSearch ws density
-  | (not.isValidDensity) density = error "Invalid density, it must be between 0 and 1 (excluding them)"
-  | (not.checkWordsValidity) ws = error "Invalid list of words, a word cannot be empty or contain a null character"
-  | otherwise = do let words = upperCase ws
-                   let gridN = max (maxWordLength words 0) (gridlength words density)
-                   let gridEmpty = genEmptyGrid gridN
-                   let charSet = availableChar words 
-                   gridWithWords <- insertWords words gridEmpty
-                   if null gridWithWords
-                      then
-                        createWordSearch words density
-                      else 
-                        do finalGrid <- fillGrid charSet gridWithWords
-                           if findUniqueWords finalGrid words
-                               then
-                               return finalGrid
-                               else
-                               createWordSearch words density
 
+-- Checks for erroneuous input and if no errors are thrown, calls auxilarry function to start the construction
+createWordSearch :: [ String ] -> Double -> IO WordSearchGrid
+createWordSearch words density
+  | (not.isValidDensity) density = error "Invalid density, it must be between 0 and 1 (excluding them)"
+  | (not.checkWordsValidity) words = error "Invalid list of words, a word cannot be empty or contain a null character"
+  | otherwise = createWordSearchAux (upperCase words) density
+
+-- Fits in the words in the grid
+-- Chooses the length based either on the longest word or the calculated value (check function gridLength)
+-- Can restart if the words can't fit (usually happens when one word splits the grid in 2 parts)
+createWordSearchAux :: [String] -> Double -> IO WordSearchGrid
+createWordSearchAux words density = do let gridN = max (maxWordLength words 0) (gridlength words density)
+                                       let gridEmpty = genEmptyGrid gridN
+                                       gridWithWords <- insertWords words gridEmpty
+                                       if null gridWithWords
+                                           then
+                                             createWordSearchAux words density
+                                           else 
+                                             verifyUniqueness words density gridWithWords
+
+-- Fills the rest of the grid with other letters and the verifies 
+verifyUniqueness :: [String] -> Double -> WordSearchGrid -> IO WordSearchGrid
+verifyUniqueness words density gridWithWords = do let charSet = availableChar words 
+                                                  finalGrid <- fillGrid charSet gridWithWords
+                                                  if findUniqueWords finalGrid words
+                                                      then
+                                                      return finalGrid
+                                                      else
+                                                      createWordSearchAux words density
 -- Validity Checks
 ------------------------------------------------------------
 isValidDensity :: Double -> Bool
@@ -207,12 +216,12 @@ genWordOrientation word = do num <- randVal 0 7
 ------------------------------------------------------------
 -- Function that generates the length for a square grid
 -- Based on the density value
--- TODO: Make it better
 gridlength :: [String] -> Double -> Int
-gridlength words density = ceiling(sqrt (characterNo words / density) + 1) 
+gridlength words density = ceiling(sqrt (characterNo words / density) + 1) -- +1 is there to ensure the "strictly less" requirement
   where
     characterNo = fromIntegral . length . concat
 
+-- Gets the length of the longest word from the given words
 maxWordLength :: [String] -> Int -> Int
 maxWordLength [] max = max
 maxWordLength (word:words) max 
@@ -265,63 +274,63 @@ replaceLetter (col, row) l (cs:css) = cs : replaceLetter (col, row - 1) l css
 -- Function attempts to insert a word into a particular area
 -- Bases the insertion on orientation and position
 -- TODO: Add a goforward go backward function that takes a position and changes it
-updateInsert :: Orientation -> Posn -> String -> [String] -> Maybe [String]
-updateInsert _ _ [] css = Just css
-updateInsert Forward p@(col, row) (l:ls) css 
-  |canReplaceLetter css l p = updateInsert Forward (col+1, row) ls (replaceLetter p l css)
+updateInsert :: Orientation -> Posn -> String -> WordSearchGrid -> Maybe [String]
+updateInsert _ _ [] grid = Just grid
+updateInsert Forward pos@(col, row) (letter:rest) grid 
+  |canReplaceLetter grid letter pos = updateInsert Forward (col+1, row) rest (replaceLetter pos letter grid)
   |otherwise = Nothing
-updateInsert Back p@(col, row) (l:ls) css 
-  |canReplaceLetter css l p = updateInsert Back (col-1, row) ls (replaceLetter p l css)  
+updateInsert Back pos@(col, row) (letter:rest) grid
+  |canReplaceLetter grid letter pos = updateInsert Back (col-1, row) rest (replaceLetter pos letter grid)  
   |otherwise = Nothing
-updateInsert Up p@(col, row) (l:ls) css 
-  |canReplaceLetter css l p = updateInsert Up (col, row - 1) ls (replaceLetter p l css)  
+updateInsert Up pos@(col, row) (letter:rest) grid
+  |canReplaceLetter grid letter pos = updateInsert Up (col, row - 1) rest (replaceLetter pos letter grid)  
   |otherwise = Nothing
-updateInsert Down p@(col, row) (l:ls) css 
-  |canReplaceLetter css l p = updateInsert Down (col, row + 1) ls (replaceLetter p l css)
+updateInsert Down pos@(col, row) (letter:rest) grid
+  |canReplaceLetter grid letter pos = updateInsert Down (col, row + 1) rest (replaceLetter pos letter grid)
   |otherwise = Nothing
-updateInsert DownForward p@(col, row) (l:ls) css 
-  |canReplaceLetter css l p = updateInsert DownForward (col+1, row + 1) ls (replaceLetter p l css)  
+updateInsert DownForward pos@(col, row) (letter:rest) grid
+  |canReplaceLetter grid letter pos = updateInsert DownForward (col+1, row + 1) rest (replaceLetter pos letter grid)  
   |otherwise = Nothing
-updateInsert DownBack p@(col, row) (l:ls) css 
-  |canReplaceLetter css l p = updateInsert DownBack (col-1, row + 1) ls (replaceLetter p l css)   
+updateInsert DownBack pos@(col, row) (letter:rest) grid
+  |canReplaceLetter grid letter pos = updateInsert DownBack (col-1, row + 1) rest (replaceLetter pos letter grid)   
   |otherwise = Nothing
-updateInsert UpBack p@(col, row) (l:ls) css 
-  |canReplaceLetter css l p = updateInsert UpBack (col-1, row - 1) ls (replaceLetter p l css)   
+updateInsert UpBack pos@(col, row) (letter:rest) grid
+  |canReplaceLetter grid letter pos = updateInsert UpBack (col-1, row - 1) rest (replaceLetter pos letter grid)   
   |otherwise = Nothing
-updateInsert UpForward p@(col, row) (l:ls) css 
-  |canReplaceLetter css l p = updateInsert UpForward (col+1, row - 1) ls (replaceLetter p l css)  
+updateInsert UpForward pos@(col, row) (letter:rest) grid
+  |canReplaceLetter grid letter pos = updateInsert UpForward (col+1, row - 1) rest (replaceLetter pos letter grid)  
   |otherwise = Nothing
 
 -- Function that acts as a guard for the updateInsert
 -- Checks if the cell is free or has the same letter as the word
-canReplaceLetter :: [String] -> Char -> Posn -> Bool 
-canReplaceLetter css l p = findLetter css p == '\0' || findLetter css p == l
+canReplaceLetter :: WordSearchGrid -> Char -> Posn -> Bool 
+canReplaceLetter grid letter pos = findLetter grid pos == '\0' || findLetter grid pos == letter
 
--- Change to foldM
 -- Function that takes an array of words and inserts them
 -- In a given grid
-insertWords :: [String] -> [String] -> IO [String]
-insertWords [] css = return css
-insertWords (w:ws) css = do first <- generateInsertWord w css 0
-                            if null first
-                               then 
-                                  return []
-                                else
-                                  insertWords ws first
+insertWords :: [String] -> WordSearchGrid -> IO [String]
+insertWords [] grid = return grid
+insertWords (word:words) grid = do first <- generateInsertWord word grid 0
+                                   if null first
+                                     then 
+                                         return []
+                                       else
+                                         insertWords words first
 
 -- Function that takes a string and generates a successfull position
 -- And orientation for it that results in it being inserted in a given grid
-generateInsertWord :: String -> [String] -> Int -> IO [String]
+-- Stops attempting to insert after 15 attempts
+generateInsertWord :: String -> WordSearchGrid -> Int -> IO [String]
 generateInsertWord _ _ 15 = return []
-generateInsertWord w css counter = do (_, orientation) <- genWordOrientation w
-                                      position <- genPosn orientation (length w) (length css)
-                                      let insertInGrid = updateInsert orientation position w css
-                                      if isJust insertInGrid
-                                        then 
-                                          do let Just grid = insertInGrid
-                                             return grid 
-                                        else 
-                                          generateInsertWord w css (counter + 1)
+generateInsertWord word grid counter = do (_, orientation) <- genWordOrientation word
+                                          position <- genPosn orientation (length word) (length grid)
+                                          let insertInGrid = updateInsert orientation position word grid
+                                          if isJust insertInGrid
+                                            then 
+                                              do let Just grid = insertInGrid
+                                                 return grid 
+                                            else 
+                                              generateInsertWord word grid (counter + 1)
 ------------------------------------------------------------
   
 -- Finish Off the Grid
@@ -329,29 +338,29 @@ generateInsertWord w css counter = do (_, orientation) <- genWordOrientation w
 -- Function that fills up the grid
 -- With already hidden words with other random characters
 -- Based on the words given
-fillGrid :: String -> [String] -> IO[String]
+fillGrid :: String -> WordSearchGrid -> IO[String]
 fillGrid _ [] = return []
-fillGrid ls (cs:css) = do line <- fillLine ls cs
-                          rest <- fillGrid ls css
-                          return (line:rest)
+fillGrid charSet (row:rows) = do line <- fillLine charSet row
+                                 rest <- fillGrid charSet rows
+                                 return (line:rest)
 
 -- Function that fills up one specific
 -- Line with random characters, except for cells taken
 -- By hidden walls
 fillLine :: String -> String -> IO String
 fillLine _ [] = return []
-fillLine ls (c:cs) = do character <- randomChar ls
-                        let r = tryReplace character c
-                        rest <- fillLine ls cs
-                        return (r:rest)
+fillLine charSet (cell:cells) = do character <- randomChar charSet
+                                   let r = tryReplace character cell
+                                   rest <- fillLine charSet cells
+                                   return (r:rest)
 
 -- Function that generates a set of 
 -- Available characters from given words
--- https://stackoverflow.com/questions/16108714/removing-duplicates-from-a-list-in-haskell-without-elem
 -- Removes duplicates from a given array with O(nlogn) time
--- TODO:: Maybe change it to the other stable solution (check link, comments under the solution i used)
+-- Courtesy to:
+-- https://stackoverflow.com/questions/16108714/removing-duplicates-from-a-list-in-haskell-without-elem
 availableChar :: [String] -> String
-availableChar ws = map head . group . sort $ concat ws 
+availableChar words = map head . group . sort $ concat words
             
 -- Function that returns either the original character
 -- Or the new one, depending on whether the cell is free or not
@@ -368,42 +377,46 @@ randomChar ls = do index <- randVal 0 (length ls - 1)
 
 -- Verify Uniqueness of the Grid
 ------------------------------------------------------------
+-- Finds All the potential start positions of a word
 startLetters :: WordSearchGrid -> [String] -> Maybe [[Posn]]
 startLetters _ [] = Just []
-startLetters css (w:ws) | isJust positionList = let (Just posn) = positionList
-                                                      in fmap (posn:) (startLetters css ws)
+startLetters grid (word:words) | isJust positionList = let (Just posn) = positionList
+                                                        in fmap (posn:) (startLetters grid words)
                         | otherwise = Nothing
     where
-      positionList = startLetter css 0 0 w
+      positionList = startLetter grid 0 0 word
 
+-- Verifies, based on the given start positions, if the word
+-- is located in more than one place
 uniqueWord :: WordSearchGrid -> Bool -> (String, [Posn]) -> Bool
-uniqueWord _ f (w,[]) = f
-uniqueWord css f (w ,p:ps)
-  | existWord && not f = uniqueWord css True (w, ps) 
-  | existWord && f = False
-  | otherwise = uniqueWord css f (w, ps)
+uniqueWord _ flag (_, []) = flag
+uniqueWord css flag (word ,pos:poss)
+  | existWord && not flag = uniqueWord css True (word, poss) 
+  | existWord && flag = False
+  | otherwise = uniqueWord css flag (word, poss)
   where
     orientations = [Forward, Back, Down , Up, UpForward, DownForward, DownBack, UpBack]
-    existWord = uniqueOrientation css False w p orientations
--- found = map (uncurry.uncurry $ findWord css) words
+    existWord = uniqueOrientation css False word pos orientations
 
+-- Passes on all possible orientations for each word's start position
+-- To ensure than none of the directions actually contain the word
 uniqueOrientation :: WordSearchGrid -> Bool -> String -> Posn -> [Orientation] -> Bool
-uniqueOrientation _ f _ _ [] = f 
-uniqueOrientation css f w p (o:os)
-  | existWord && not f = uniqueOrientation css True w p os 
-  | existWord && f = False
-  | otherwise = uniqueOrientation css f w p os
+uniqueOrientation _ flag _ _ [] = flag
+uniqueOrientation grid flag word pos (o:os)
+  | existWord && not flag = uniqueOrientation grid True word pos os 
+  | existWord && flag = False
+  | otherwise = uniqueOrientation grid flag word pos os
     where
-      existWord = findWord css o w p
+      existWord = findWord grid o word pos
 
+-- Takes the grid and the words given and checks if each words is unique
 findUniqueWords :: WordSearchGrid -> [String] -> Bool
-findUniqueWords css ws  = and $ map (uniqueWord css False) tuples
+findUniqueWords grid words  = all (uniqueWord grid False) tuples
  where
-   Just positions = startLetters css ws
+   Just positions = startLetters grid words
    tuples :: [(String, [Posn])]
-   tuples = zip ws positions
+   tuples = zip words positions
   
-                                                         
 ------------------------------------------------------------
   
 --- Convenience functions supplied for testing purposes
@@ -417,39 +430,6 @@ printGrid :: WordSearchGrid -> IO ()
 printGrid [] = return ()
 printGrid (w:ws) = do putStrLn w
                       printGrid ws
--- Debug is a function that only puts in the hidden words
--- in the grid without any random characters
--- (the rest of the cells just have '0' in them) 
--- debug :: [String] -> Double -> IO WordSearchGrid
--- debug ws density = insertWords ws gridEmpty
---   where
---     gridN= gridlength ws density
---     gridEmpty = genEmptyGrid gridN
-
- 
--- --- Convenience functions supplied for testing purposes
--- createAndSolve :: [ String ] -> Double -> IO [ (String, Maybe Placement) ]
--- createAndSolve words maxDensity =   do g <- debug words maxDensity
---                                        let soln = solveWordSearch words g
---                                        printGrid g
---                                         return soln
-
--- -- createAndSolve :: [ String ] -> Double -> IO [ (String, Maybe Placement) ]
--- -- createAndSolve words maxDensity =   do g <- createWordSearch words maxDensity
--- --                                        let soln = solveWordSearch words g
--- --                                        printGrid g
--- --                                        return soln
-                                       
--- -- Changed the functions bellow to improve the prettyPrint of the grid
--- printGrid :: WordSearchGrid -> IO ()
--- printGrid [] = return ()
--- printGrid (w:ws) = do printLine w
---                       printGrid ws
-
--- -- Function that pretty-prints one line of a grid printLine :: String -> IO () printLine [] = putChar '\n' 
--- printLine (l:ls) = do putChar l
---                       putChar ' '
---                       printLine ls
 
 -- Challenge 3 --
 
