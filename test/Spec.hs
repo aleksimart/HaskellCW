@@ -57,7 +57,8 @@ main = do
     stage "simple grammar rules (only positive integers for variables and integers,\n capital letters for macros and only x for variables)" simpleParsingRules
     stage "application associativity" (runTestTT simpleAppsTest)
     stage "application/abstraction precedence" (runTestTT mixTest)
-    stage "original examples given" (runTestTT casesTest)
+    stage "original examples given" (runTestTT casesTest5)
+    stage "extended test cases including spacing and macros grammar" (runTestTT extendedCasesTest4)
  
     start 5
     stage "simple cps transformation rules" (runTestTT simpleTest5)
@@ -70,7 +71,8 @@ main = do
     stage "inner reductions of a cps transformed expression step by step" (runTestTT innerCpsReductionsTest6'1)
     stage "outer reductions of a cps transformed expression step by step" (runTestTT outerCpsReductionsTest6'1)
 
-
+-- Helper Formatter Functions
+------------------------------------------------------------
 isUpperLetters :: String -> Bool
 isUpperLetters [] = False
 isUpperLetters (' ':rest) = isUpperLetters rest
@@ -90,16 +92,12 @@ stage name test = do putStrLn ("Testing " ++ name)
                      test
                      putStrLn "-----------------------------------------------------"
                      putStrLn ""
-
--- intPropTest :: Int -> Bool
--- intPropTest val =  parseLamMacro ("x" ++ show s) == (LamVar (s))
--- TODO More square grid tests
+------------------------------------------------------------
 
 -- Challenge 1
--- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 -- Testing for the error cases
 ------------------------------------------------------------
--- exEr1'1 = assertError "Empty Grid Mustn't be allowed"      wrongEx1
 exEr1'2 = assertError "Non-square Grid Mustn't be allowed" wrongEx2 
 exEr1'3 = assertError "Empty String Mustn't be allowed (Last position)"    wrongEx3 
 exEr1'4 = assertError "Words containing non-alphabetic characters are not allowed" wrongEx4 
@@ -249,7 +247,7 @@ testLarge1 = do time1 <- benchmark (evaluate $ solveWordSearch exWords1'3 exGrid
                 runTestTT total
 ------------------------------------------------------------
 
--- Helper Function
+-- Helper Functions
 upperCase :: [(String, Maybe Placement)] -> [(String, Maybe Placement)]
 upperCase xs = zip (map (map toUpper.fst) xs) (map snd xs)
 
@@ -265,16 +263,19 @@ errCase2'1 = assertIOError "Grid can't have density of 0"  exErr2'1
 errCase2'2 = assertIOError "Grid can't have density of 1" exErr2'2
 errCase2'3 = assertIOError "Words can only have alphabet characters" exErr2'3
 errCase2'4 = assertIOError "Cannot have empty words" exErr2'4
+errCase2'5 = assertIOError "Cannot have non-unique words" exErr2'5
 
 exErr2'1 =  createWordSearch ["JUST", "LITTLE", "TEST"] 0
 exErr2'2 =  createWordSearch ["JUST", "LITTLE", "TEST"] 1
 exErr2'3 =  createWordSearch ["USE", "WEIRD", "SYMBOL\0"] 0.6
 exErr2'4 =  createWordSearch (removeWord (last emptyStringWords) emptyStringWords) 0.8
+exErr2'5 =  createWordSearch ["JUST", "LITTLE", "TEST", "JUST"] 0.5
 
 testErr2 = TestList [TestLabel "Checking wrong density exception (0)" errCase2'1,
                        TestLabel "Checking wrong density exception (1)" errCase2'2,
                        TestLabel "Checking words with invalid symbol" errCase2'3,
-                       TestLabel "Checking empty words exception" errCase2'4]
+                       TestLabel "Checking empty words exception" errCase2'4,
+                        TestLabel "Checking duplicate words exception" errCase2'5]
 ------------------------------------------------------------
 
 -- Testing Trivial Cases
@@ -348,6 +349,10 @@ ex2'5 = createWordSearch exWords2'5 exDensity2'5
 exWords2'5 = ["HEREISAVERYLONGWORDTOPUTIN", "SMALL"] 
 exDensity2'5 = 0.99
 
+ex2'6 = createWordSearch exWords2'6 0.99
+exWords2'6 = ["DEN"]
+exDensity2'6 = 0.99
+
 extremeTest2'1 = do grid1 <- ex2'4
                     let solution1 = solveWordSearch exWords2'4 grid1
                     time2 <- benchmark (createWordSearch exWords2'4 exDensity2'4)
@@ -364,19 +369,22 @@ extremeTest2'1 = do grid1 <- ex2'4
                                              assertEqual "Not all the words were found" (getFoundWords solution2) exWords2'5
                                              assertBool  "Test Timed out (more than 15 seconds to do it)" (timeout time2))
 
+                    grid3 <- ex2'6
+                    let solution3 = solveWordSearch exWords2'6 grid3
+                    time3 <- benchmark (createWordSearch exWords2'6 exDensity2'6)
+                    let test3 = TestCase (do assertBool  "Shape Must be Square" (verifyShape grid3)
+                                             assertBool  "Density must be strictly less" (verifyDensity grid3 (length exWords2'6) exDensity2'6)
+                                             assertEqual "Not all the words were found" (getFoundWords solution3) exWords2'6
+                                             assertBool  "Test Timed out (more than 15 seconds to do it)" (timeout time3))
+
                     let testList = TestList [TestLabel "Very dense grid (0.99)" test1,
-                                            TestLabel "One very long word" test2]
+                                            TestLabel "One very long word" test2,
+                                            TestLabel "Very restricted possibilities due to high chance of not being unique" test3]
                     runTestTT testList
 ------------------------------------------------------------
 -- Challenge 3
 
--- Testing for the error cases
-------------------------------------------------------------
-errCase3'1 = assertError "Negative numbers are not allowed in variables" (prettyPrint errExpr3'1)
-errExpr3'1 = LamDef [] (LamVar (-3))
-
-errCase3'2 = assertError "Negative numbers are not allowed in variables" (prettyPrint errExpr3'2)
-errExpr3'2 = LamDef [] (LamAbs (-1) (LamVar 3)) 
+-- Testing Simple cases
 ------------------------------------------------------------
 simpleTest3'1 = TestCase (assertEqual "Wrong pretty print output" (prettyPrint ex3'1) "(\\x1 -> x1) \\x1 -> x1")
 simpleTest3'2 = TestCase (assertEqual "Wrong pretty print output" (prettyPrint ex3'2) "\\x1 -> x1 \\x1 -> x1")
@@ -387,19 +395,6 @@ ex3'1 = LamDef [] (LamApp (LamAbs 1 (LamVar 1)) (LamAbs 1 (LamVar 1)))
 ex3'2 = LamDef [] (LamAbs 1 (LamApp (LamVar 1) (LamAbs 1 (LamVar 1))))
 ex3'3 = LamDef [ ("F", LamAbs 1 (LamVar 1) ) ] (LamAbs 2 (LamApp (LamVar 2) (LamMacro "F")))
 ex3'4 = LamDef [ ("F", LamAbs 1 (LamVar 1) ) ] (LamAbs 2 (LamApp (LamAbs 1 (LamVar 1)) (LamVar 2))) 
--- simpleTest3'5 = assertEqual "Wrong pretty print output" (prettyPrint ex3'1) "(\\x1 -> x1) \\x1 -> x1"
--- simpleTest3'6 = assertEqual "Wrong pretty print output" (prettyPrint ex3'1) "(\\x1 -> x1) \\x1 -> x1"
--- simpleTest3'7 = assertEqual "Wrong pretty print output" (prettyPrint ex3'1) "(\\x1 -> x1) \\x1 -> x1"
--- simpleTest3'8 = assertEqual "Wrong pretty print output" (prettyPrint ex3'1) "(\\x1 -> x1) \\x1 -> x1"
--- simpleTest3'9 = assertEqual "Wrong pretty print output" (prettyPrint ex3'1) "(\\x1 -> x1) \\x1 -> x1"
--- simpleTest3'10 = assertEqual "Wrong pretty print output" (prettyPrint ex3'1) "(\\x1 -> x1) \\x1 -> x1"
-
--- ex3'5 = LamDef [("F", LamAbs 1 (LamVar 1)), ("G", LamApp(LamAbs 1 (LamVar 1)) (LamVar 2))] (LamAbs 1 (LamVar 1))
--- ex3'6 = LamDef [("F", LamAbs 1 (LamVar 1)), ("G", LamAbs 2 (LamAbs 1 (LamVar 1)))] (LamApp(LamAbs 2 (LamAbs 1 (LamVar 1))) (LamVar 2))
--- ex3'7 = LamDef [] (LamAbs 3 (LamApp (LamAbs 6 (LamApp (LamVar 6) (LamVar 1))) (LamAbs 4 (LamApp (LamAbs 7 (LamApp (LamVar 7)  (LamVar 2))) (LamAbs 5 (LamApp (LamApp (LamVar 4) (LamVar 5)) (LamVar 3)))))))
--- ex3'8 = LamDef [("F", LamAbs 2 (LamAbs 1 (LamVar 1))),("G", LamAbs 1 (LamVar 1))] (LamApp (LamVar 3) (LamApp (LamVar 1) (LamVar 2)))
--- ex3'9 = LamDef []  (LamApp(LamAbs 1 (LamAbs 2 (LamVar 1))) (LamVar 2))
--- ex3'10 = LamDef [] (LamAbs 2(LamAbs 1(LamAbs 0 (LamVar 0))))
 
 simpleTests3'1 = TestList [TestLabel ("Simple Test 1: " ++ show ex3'1)  simpleTest3'1,
                            TestLabel ("Simple Test 2: " ++ show ex3'2)  simpleTest3'2,
@@ -432,10 +427,9 @@ edgeTests3'1 = TestList [ TestLabel "Unexpanding Macros within expressions and w
                         TestLabel "Appropriate bracketing for abstraction and application 1" edgeEx3'8,
                         TestLabel "Appropriate bracketing for abstraction and application 2" edgeEx3'9,
                         TestLabel "Use of the biggest macro for unexpanding" edgeEx3'10]
-
 ------------------------------------------------------------
+    
 -- Challenge 4
-
 
 -- Checking simple input Parsing rules
 ------------------------------------------------------------
@@ -493,7 +487,7 @@ ex4'10 = "def F = \\x1 -> x1 in def F = \\x2 -> x2 x1 in x1"
 case4'11 = TestCase (assertEqual ("Incorrect Parsing of expression " ++ ex4'11) Nothing (parseLamMacro ex4'11))
 ex4'11 = "def F = x1 in F"
 
-casesTest = TestList [ TestLabel "Given example 2" case4'7,
+casesTest4 = TestList [ TestLabel "Given example 2" case4'7,
                        TestLabel "Given example 3" case4'8,
                        TestLabel "Given example 4" case4'9,
                        TestLabel "Given example 5" case4'10,
@@ -504,8 +498,22 @@ casesTest = TestList [ TestLabel "Given example 2" case4'7,
 case4'12 = TestCase (assertEqual ("Incorrect Parsing of expression " ++ ex4'12) Nothing (parseLamMacro ex4'12))
 ex4'12 = "def F = \\x1 -> x1 \\x3 -> x2 x3 in F"
 
--- TODO verify the spacing later
--- Check macro within expression
+case4'13 = TestCase (assertEqual ("Incorrect Parsing of expression " ++ ex4'13) ans4'13 (parseLamMacro ex4'13))
+ex4'13 = "defG=\\x1->x1inx1"
+ans4'13 = Just (LamDef [("G",LamAbs 1 (LamVar 1))] (LamVar 1))
+
+case4'14 = TestCase (assertEqual ("Incorrect Parsing of expression " ++ ex4'14) Nothing (parseLamMacro ex4'14))
+ex4'14 = "\\    x1->x1"
+
+
+case4'15 = TestCase (assertEqual ("Incorrect Parsing of expression " ++ ex4'15) ans4'15 (parseLamMacro ex4'15))
+ex4'15 = "      x1                        x2  "
+ans4'15 = Just (LamDef [] (LamApp (LamVar 1) (LamVar 2)))
+
+extendedCasesTest4 = TestList [ TestLabel "Lambda grammar error" case4'12,
+                       TestLabel "Spacing doesn't matter" case4'13,
+                       TestLabel "Spacing does matter" case4'14,
+                       TestLabel "Spacing doesn't matter" case4'15 ]
     
 -- Challenge 5
 ------------------------------------------------------------

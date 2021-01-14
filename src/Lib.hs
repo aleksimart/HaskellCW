@@ -55,6 +55,8 @@ data LamExpr = LamMacro String | LamApp LamExpr LamExpr  |
 
 -- AUTHOR: Aleksei Martirosov
 -- Solutions to challenges from 1 to 6
+-- ID: 31224032
+-- Property of University of Suuthampton
 
 -- Challenge 1 --
 
@@ -182,6 +184,8 @@ upperCase = map (map toUpper)
 -- Checks for erroneuous input and if no errors are thrown, calls auxilarry function to start the construction
 createWordSearch :: [String] -> Double -> IO WordSearchGrid
 createWordSearch words density
+  | length (nub words) /= length words = error
+    "List of words contains duplicates"
   | (not . isValidDensity) density = error
     "Invalid density, it must be between 0 and 1 (excluding them)"
   | (not . checkWordsValidity) words = error
