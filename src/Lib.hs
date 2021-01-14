@@ -273,7 +273,6 @@ replaceLetter (col, row) l (cs:css) = cs : replaceLetter (col, row - 1) l css
 
 -- Function attempts to insert a word into a particular area
 -- Bases the insertion on orientation and position
--- TODO: Add a goforward go backward function that takes a position and changes it
 updateInsert :: Orientation -> Posn -> String -> WordSearchGrid -> Maybe [String]
 updateInsert _ _ [] grid = Just grid
 updateInsert Forward pos@(col, row) (letter:rest) grid 
@@ -390,22 +389,27 @@ startLetters grid (word:words) | isJust positionList = let (Just posn) = positio
 -- is located in more than one place
 uniqueWord :: WordSearchGrid -> Bool -> (String, [Posn]) -> Bool
 uniqueWord _ flag (_, []) = flag
-uniqueWord css flag (word ,pos:poss)
+uniqueWord css flag (word, pos:poss) 
+  | not unique = False
   | existWord && not flag = uniqueWord css True (word, poss) 
   | existWord && flag = False
   | otherwise = uniqueWord css flag (word, poss)
   where
     orientations = [Forward, Back, Down , Up, UpForward, DownForward, DownBack, UpBack]
-    existWord = uniqueOrientation css False word pos orientations
+    (existWord, unique) = uniqueOrientation css False True word pos orientations
 
 -- Passes on all possible orientations for each word's start position
 -- To ensure than none of the directions actually contain the word
-uniqueOrientation :: WordSearchGrid -> Bool -> String -> Posn -> [Orientation] -> Bool
-uniqueOrientation _ flag _ _ [] = flag
-uniqueOrientation grid flag word pos (o:os)
-  | existWord && not flag = uniqueOrientation grid True word pos os 
-  | existWord && flag = False
-  | otherwise = uniqueOrientation grid flag word pos os
+-- One flag verifies that a word exists
+-- Another flag verifies that a word either doesn't exist, or exists exactly once
+-- Two flags are needed because a particular point might not have a word, which is not
+-- Necessarily an error, since the word might appear later
+uniqueOrientation :: WordSearchGrid -> Bool -> Bool -> String -> Posn -> [Orientation] -> (Bool, Bool)
+uniqueOrientation _ flag1 flag2 _ _ [] = (flag1, flag2)
+uniqueOrientation grid flag1 flag2 word pos (o:os)
+  | existWord && not flag1 = uniqueOrientation grid True flag2 word pos os 
+  | existWord && flag1 = (flag1, False)
+  | otherwise = uniqueOrientation grid flag1 flag2 word pos os
     where
       existWord = findWord grid o word pos
 
