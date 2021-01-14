@@ -105,40 +105,38 @@ placementSearch grid (word, Just (position:positions))
 -- Return True if in a particular Orientation this word is located in and false otherwise
 findWord :: WordSearchGrid -> Orientation -> String -> Posn -> Bool
 findWord _ _ [] _ = True
-findWord css Forward (l:ls) p@(col, row)
-  | col > (length css - 1)                           = False
-  | l == findLetter css p                            = findWord css Forward ls (col + 1, row)
+findWord grid Forward (letter:rest) pos@(col, row)
+  | col > (length grid - 1)                           = False
+  | letter == findLetter grid pos                            = findWord grid Forward rest (col + 1, row)
   | otherwise = False
-findWord css DownForward (l:ls) p@(col, row) 
-  | col > (length css - 1) || row > (length css - 1) = False
-  | l == findLetter css p                            = findWord css DownForward ls (col + 1, row + 1)
+findWord grid DownForward (letter:rest) pos@(col, row) 
+  | col > (length grid - 1) || row > (length grid - 1) = False
+  | letter == findLetter grid pos                            = findWord grid DownForward rest (col + 1, row + 1)
   | otherwise                                        = False
-findWord css Down (l:ls) p@(col, row) 
-  | row > (length css - 1)                           = False
-  | l == findLetter css p                            = findWord css Down ls (col, row + 1)
+findWord grid Down (letter:rest) pos@(col, row) 
+  | row > (length grid - 1)                           = False
+  | letter == findLetter grid pos                            = findWord grid Down rest (col, row + 1)
   | otherwise                                        = False
-findWord css DownBack (l:ls) p@(col, row) 
-  | col < 0 || row > (length css - 1)                = False
-  | l == findLetter css p                            = findWord css DownBack ls (col - 1, row + 1)
+findWord grid DownBack (letter:rest) pos@(col, row) 
+  | col < 0 || row > (length grid - 1)                = False
+  | letter == findLetter grid pos                            = findWord grid DownBack rest (col - 1, row + 1)
   | otherwise                                        = False
-findWord css Back (l:ls) p@(col, row)
+findWord grid Back (letter:rest) pos@(col, row)
   | col < 0                                          = False
-  | l == findLetter css p                            = findWord css Back ls (col - 1, row)
+  | letter == findLetter grid pos                            = findWord grid Back rest (col - 1, row)
   | otherwise                                        = False
-findWord css UpBack (l:ls) p@(col, row) 
+findWord grid UpBack (letter:rest) pos@(col, row) 
   | col < 0 || row < 0                               = False
-  | l == findLetter css p                            = findWord css UpBack ls (col - 1, row - 1)
+  | letter == findLetter grid pos                            = findWord grid UpBack rest (col - 1, row - 1)
   | otherwise                                        = False
-findWord css Up (l:ls) p@(col, row) 
+findWord grid Up (letter:rest) pos@(col, row) 
   | row < 0                                          = False
-  | l == findLetter css p                            = findWord css Up ls (col, row - 1)
+  | letter == findLetter grid pos                            = findWord grid Up rest (col, row - 1)
   | otherwise                                        = False
-findWord css UpForward (l:ls) p@(col, row) 
-  | col > (length css - 1) || row < 0                = False
-  | l == findLetter css p                            = findWord css UpForward ls (col + 1, row - 1)
+findWord grid UpForward (letter:rest) pos@(col, row) 
+  | col > (length grid - 1) || row < 0                = False
+  | letter == findLetter grid pos                            = findWord grid UpForward rest (col + 1, row - 1)
   | otherwise                                        = False 
-
-
 
 -- Additional Helper Functions
 ------------------------------------------------------------
