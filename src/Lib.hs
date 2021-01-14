@@ -38,73 +38,71 @@ data Orientation = Forward | Back | Up | Down | UpForward | UpBack | DownForward
 
 -- Challenge 1 --
 
--- Should work with no words as well
 solveWordSearch :: [ String ] -> WordSearchGrid -> [ (String,Maybe Placement) ]
-solveWordSearch ws css 
-    |(not.checkGridValidity) grid  = error "Invalid Grid, it must be square"
-    | null grid = solveEmptyGrid ws
-    |(not.checkWordsValidity) words  = error "Invalid list of words, a word cannot be an empty string or contain a null character"
-    | otherwise                   = map (placementSearch grid) tuples  
+solveWordSearch words grid 
+    |(not.checkGridSquare) upperGrid  = error "Invalid Grid, it must be square"
+    | null grid = solveEmptyGrid words 
+    |(not.checkWordsValidity) upperWords  = error "Invalid list of words, a word cannot be an empty string or contain a null character"
+    | otherwise                   = map (placementSearch upperGrid) tuples  
   where
-    words = upperCase ws
-    grid = upperCase css
-    starts = map (startLetter grid 0 0) words
-    tuples = zip words starts
+    upperWords = upperCase words
+    upperGrid = upperCase grid
+    starts = map (startLetter upperGrid 0 0) upperWords
+    tuples = zip upperWords starts
 
+-- Input checks
+------------------------------------------------------------
+-- Quickly map all the words with Nothing for an empty grid
 solveEmptyGrid :: [String] -> [(String, Maybe Placement)]
 solveEmptyGrid words = [(w,Nothing) | w <- words]
 
-checkGridValidity :: WordSearchGrid -> Bool
-checkGridValidity [] = True
-checkGridValidity g@(cs:_) = length g == length cs
+-- Ensures that the given Grid is square
+checkGridSquare :: WordSearchGrid -> Bool
+checkGridSquare [] = True
+checkGridSquare grid@(row:_) = length grid == length row
 
+-- Checks that the words don't use the illegal '\0' character
+-- It is required for challenge 2 showing the empty cells
 checkWordsValidity :: [String] -> Bool
 checkWordsValidity [] = False
 checkWordsValidity ([] : _) = False
-checkWordsValidity [w] = '\0' `notElem` w
-checkWordsValidity (w:ws) = '\0' `notElem` w && checkWordsValidity ws
+checkWordsValidity [word] = '\0' `notElem` word
+checkWordsValidity (word:words) = '\0' `notElem` word && checkWordsValidity words
+------------------------------------------------------------
 
-upperCase :: [String] -> [String]
-upperCase = map (map toUpper) 
-
--- Function searches for all locations where the first letter of the word
--- matches the letter in the cell or returns Nothing if none are found
--- w = word, c = cell, l = letter 
+-- Word Search
+------------------------------------------------------------
+-- Search all locations where the first letter of the word matches
+-- The letter in the cell or return Nothing if none are found
 startLetter :: WordSearchGrid -> Int -> Int -> String ->Maybe [Posn]
 startLetter  _ _ _ []= error "This game won't work with an empty string"
 startLetter [] _ _ _ = Just []
-startLetter ([]:css) row _ w = startLetter css (row + 1) 0 w
-startLetter ((c:cs):css) row col w@(l:_) | l == c = fmap ((col,row):) nextcellSearch
+startLetter ([]:rest) rowNum _ word = startLetter rest (rowNum + 1) 0 word
+startLetter ((cell:cells):rest) rowNum colNum word@(letter:_) | letter == cell = fmap ((colNum,rowNum):) nextcellSearch
   | otherwise = nextcellSearch
   where 
-    leftcells = cs:css
-    nextcellSearch = startLetter leftcells row (col + 1) w 
+    leftcells = cells:rest
+    nextcellSearch = startLetter leftcells rowNum (colNum + 1) word
 
--- Function attempts to find the placement for a particular word
--- based on the list of positions passed as a parameter
--- All the directions are attempted for all the positions and if no placement is found
--- then return Nothing
--- w = word, p = position, c = cell
+-- Attempt finding the placement of a word based on the list of positions passed
+-- All the directions are attempted for all the positions and Nothing is returned when
+-- No placement is ofund
 placementSearch :: WordSearchGrid -> (String, Maybe [Posn])  -> (String, Maybe Placement)
-placementSearch _ (w, Nothing) = (w, Nothing)
-placementSearch _ (w, Just[]) = (w, Nothing)
-placementSearch css (w, Just (p:ps)) 
-  | findWord css Forward w p          = (w, Just(p, Forward))
-  | findWord css DownForward w p      = (w, Just(p, DownForward))
-  | findWord css Down w p             = (w, Just(p, Down))
-  | findWord css DownBack w p         = (w, Just(p, DownBack))
-  | findWord css Back w p             = (w, Just(p, Back))
-  | findWord css UpBack w p           = (w, Just(p, UpBack))
-  | findWord css Up w p               = (w, Just(p, Up))
-  | findWord css UpForward w p        = (w, Just(p, UpForward))
-  | otherwise                         = placementSearch css (w, Just ps) 
+placementSearch _ (word, Nothing) = (word, Nothing)
+placementSearch _ (word, Just[]) = (word, Nothing)
+placementSearch grid (word, Just (position:positions)) 
+  | findWord grid Forward word position          = (word, Just(position, Forward))
+  | findWord grid DownForward word position      = (word, Just(position, DownForward))
+  | findWord grid Down word position             = (word, Just(position, Down))
+  | findWord grid DownBack word position         = (word, Just(position, DownBack))
+  | findWord grid Back word position             = (word, Just(position, Back))
+  | findWord grid UpBack word position           = (word, Just(position, UpBack))
+  | findWord grid Up word position               = (word, Just(position, Up))
+  | findWord grid UpForward word position        = (word, Just(position, UpForward))
+  | otherwise                         = placementSearch grid (word, Just positions) 
 
--- Function attempts to compare all the word's letters with all the cells in a particular Orientation
--- returns True if in a particular Orientation we get a word and false
--- if at any point the position leaves the valid range or the letter of the words isn't the same as in
--- the cell
--- c = cell, l = letter, col = column, row = row, p = position
--- TODO combine two guards maybe
+-- Attempt comparing all of the word's letters with all the respective cells in a particular Orientation
+-- Return True if in a particular Orientation this word is located in and false otherwise
 findWord :: WordSearchGrid -> Orientation -> String -> Posn -> Bool
 findWord _ _ [] _ = True
 findWord css Forward (l:ls) p@(col, row)
@@ -140,10 +138,18 @@ findWord css UpForward (l:ls) p@(col, row)
   | l == findLetter css p                            = findWord css UpForward ls (col + 1, row - 1)
   | otherwise                                        = False 
 
--- TODO: Add Intermidiary Check for point validity (Possibly)
+
+
+-- Additional Helper Functions
+------------------------------------------------------------
 -- Function searches for a character located at a particular position
 findLetter :: WordSearchGrid -> Posn -> Char 
 findLetter css (col, row) = (css!!row)!!col
+
+-- Converts all the words/Grid to upperCase for consistency
+upperCase :: [String] -> [String]
+upperCase = map (map toUpper) 
+
 
 -- Challenge 2 --
 -- TODO clean up this mess and optimise by breaking down the check into a separate function (can keep this one and the rest that can be recursive should be called later)
