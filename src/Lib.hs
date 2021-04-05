@@ -1,11 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 -- comp2209 Functional Programming Challenges
 -- (c) University of Southampton 2020
--- Skeleton code to be updated with your solutions
--- The dummy functions here simply return an arbitrary value that is usually wrong 
-
--- DO NOT MODIFY THE FOLLOWING LINES OF CODE
--- Changed Challenges to Lib
 module Lib
   ( WordSearchGrid
   , Placement
@@ -23,19 +18,17 @@ module Lib
   , compareInnerOuter
   ) where
 
--- Import standard library and parsing definitions from Hutton 2016, Chapter 13
--- We import System.Random - make sure that your installation has it installed - use stack ghci and stack ghc
-import           Data.Char
-import           Parsing
+import           Control.DeepSeq
 import           Control.Monad
+import           Data.Char
 import           Data.List
+import           Data.Maybe
 import           GHC.Generics                   ( Generic
                                                 , Generic1
                                                 )
-import           Control.DeepSeq
+import           Parsing
 import           System.IO
 import           System.Random
-import           Data.Maybe
 
 -- TODO remove the checks in challenge 3 for incorecctness
 -- types for Part I
@@ -122,7 +115,9 @@ placementSearch _ (word, Nothing) = (word, Nothing)
 placementSearch _ (word, Just []) = (word, Nothing)
 placementSearch grid (word, Just (position : positions))
   | findWord grid Forward word position = (word, Just (position, Forward))
-  | findWord grid DownForward word position = ( word , Just (position, DownForward))
+  | findWord grid DownForward word position = ( word
+                                              , Just (position, DownForward)
+                                              )
   | findWord grid Down word position = (word, Just (position, Down))
   | findWord grid DownBack word position = (word, Just (position, DownBack))
   | findWord grid Back word position = (word, Just (position, Back))
@@ -141,7 +136,10 @@ findWord grid Forward (letter : rest) pos@(col, row)
   | otherwise                     = False
 findWord grid DownForward (letter : rest) pos@(col, row)
   | col > (length grid - 1) || row > (length grid - 1) = False
-  | letter == findLetter grid pos = findWord grid DownForward rest (col + 1, row + 1)
+  | letter == findLetter grid pos = findWord grid
+                                             DownForward
+                                             rest
+                                             (col + 1, row + 1)
   | otherwise = False
 findWord grid Down (letter : rest) pos@(col, row)
   | row > (length grid - 1)       = False
@@ -149,7 +147,10 @@ findWord grid Down (letter : rest) pos@(col, row)
   | otherwise                     = False
 findWord grid DownBack (letter : rest) pos@(col, row)
   | col < 0 || row > (length grid - 1) = False
-  | letter == findLetter grid pos = findWord grid DownBack rest (col - 1, row + 1)
+  | letter == findLetter grid pos = findWord grid
+                                             DownBack
+                                             rest
+                                             (col - 1, row + 1)
   | otherwise = False
 findWord grid Back (letter : rest) pos@(col, row)
   | col < 0                       = False
@@ -165,7 +166,10 @@ findWord grid Up (letter : rest) pos@(col, row)
   | otherwise                     = False
 findWord grid UpForward (letter : rest) pos@(col, row)
   | col > (length grid - 1) || row < 0 = False
-  | letter == findLetter grid pos = findWord grid UpForward rest (col + 1, row - 1)
+  | letter == findLetter grid pos = findWord grid
+                                             UpForward
+                                             rest
+                                             (col + 1, row - 1)
   | otherwise = False
 
 -- Additional Helper Functions
@@ -307,39 +311,64 @@ replaceLetter (col, row) l (cs : css) = cs : replaceLetter (col, row - 1) l css
 
 -- Function attempts to insert a word into a particular area
 -- Bases the insertion on orientation and position
-updateInsert :: Orientation -> Posn -> String -> WordSearchGrid -> Maybe [String]
+updateInsert
+  :: Orientation -> Posn -> String -> WordSearchGrid -> Maybe [String]
 updateInsert _ _ [] grid = Just grid
 updateInsert Forward pos@(col, row) (letter : rest) grid
   | canReplaceLetter grid letter pos = updateInsert
-    Forward (col + 1, row) rest (replaceLetter pos letter grid)
+    Forward
+    (col + 1, row)
+    rest
+    (replaceLetter pos letter grid)
   | otherwise = Nothing
 updateInsert Back pos@(col, row) (letter : rest) grid
   | canReplaceLetter grid letter pos = updateInsert
-    Back (col - 1, row) rest (replaceLetter pos letter grid)
+    Back
+    (col - 1, row)
+    rest
+    (replaceLetter pos letter grid)
   | otherwise = Nothing
 updateInsert Up pos@(col, row) (letter : rest) grid
   | canReplaceLetter grid letter pos = updateInsert
-    Up (col, row - 1) rest (replaceLetter pos letter grid)
+    Up
+    (col, row - 1)
+    rest
+    (replaceLetter pos letter grid)
   | otherwise = Nothing
 updateInsert Down pos@(col, row) (letter : rest) grid
   | canReplaceLetter grid letter pos = updateInsert
-    Down (col, row + 1) rest (replaceLetter pos letter grid)
+    Down
+    (col, row + 1)
+    rest
+    (replaceLetter pos letter grid)
   | otherwise = Nothing
 updateInsert DownForward pos@(col, row) (letter : rest) grid
   | canReplaceLetter grid letter pos = updateInsert
-    DownForward (col + 1, row + 1) rest (replaceLetter pos letter grid)
+    DownForward
+    (col + 1, row + 1)
+    rest
+    (replaceLetter pos letter grid)
   | otherwise = Nothing
 updateInsert DownBack pos@(col, row) (letter : rest) grid
   | canReplaceLetter grid letter pos = updateInsert
-    DownBack (col - 1, row + 1) rest (replaceLetter pos letter grid)
+    DownBack
+    (col - 1, row + 1)
+    rest
+    (replaceLetter pos letter grid)
   | otherwise = Nothing
 updateInsert UpBack pos@(col, row) (letter : rest) grid
   | canReplaceLetter grid letter pos = updateInsert
-    UpBack (col - 1, row - 1) rest (replaceLetter pos letter grid)
+    UpBack
+    (col - 1, row - 1)
+    rest
+    (replaceLetter pos letter grid)
   | otherwise = Nothing
 updateInsert UpForward pos@(col, row) (letter : rest) grid
   | canReplaceLetter grid letter pos = updateInsert
-    UpForward (col + 1, row - 1) rest (replaceLetter pos letter grid)
+    UpForward
+    (col + 1, row - 1)
+    rest
+    (replaceLetter pos letter grid)
   | otherwise = Nothing
 
 -- Function that acts as a guard for the updateInsert
@@ -868,7 +897,17 @@ transitionExpr (k, LamApp e1 e2) = (fst expr2, csp)
   expr2 = transitionExpr (fst expr1, e2)
   f     = inc k
   e     = inc f
-  csp   = LamAbs k (LamApp (snd expr1) (LamAbs f (LamApp (snd expr2) (LamAbs e (LamApp (LamApp (LamVar f) (LamVar e)) (LamVar k))))))
+  csp   = LamAbs
+    k
+    (LamApp
+      (snd expr1)
+      (LamAbs
+        f
+        (LamApp (snd expr2)
+                (LamAbs e (LamApp (LamApp (LamVar f) (LamVar e)) (LamVar k)))
+        )
+      )
+    )
 
 -- Additional Helper Functions
 ------------------------------------------------------------
@@ -965,7 +1004,10 @@ subst max (LamVar x) y expr | x == y = (max, expr)
 subst max (LamMacro x) _ _ = (max, LamMacro x)
 subst max (LamAbs x e1) y e
   | x /= y && not (free e x) = (max, LamAbs x inner1)
-  | x /= y && free e x = subst (fst inner2Tuple) (LamAbs max (snd inner2Tuple)) y e
+  | x /= y && free e x = subst (fst inner2Tuple)
+                               (LamAbs max (snd inner2Tuple))
+                               y
+                               e
   | x == y = (max, LamAbs x e1)
  where
   inner1      = snd $ subst max e1 y e
@@ -976,7 +1018,7 @@ subst x' (LamApp e1 e2) y e =
   expr1Tuple = subst x' e1 y e
   expr2Tuple = subst (fst expr1Tuple) e2 y e
 ------------------------------------------------------------
-  
+
 -- Single reduction functions
 ------------------------------------------------------------
 -- Inner reduction function based on the lectures with addition of reduction under lambda
